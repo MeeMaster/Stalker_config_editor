@@ -14,7 +14,7 @@ simple_view = True
 
 
 class MainWindow(QMainWindow):
-    directory_signal = pyqtSignal(str, bool)
+    directory_signal = pyqtSignal(str, str)
     view_switch_signal = pyqtSignal(bool)
     save_data = pyqtSignal(bool)
 
@@ -38,6 +38,7 @@ class MainWindow(QMainWindow):
         view.addAction(simple_view_toggle)
         view.triggered[QAction].connect(self.process_trigger)
         file.addAction("Open")
+        file.addAction("Read gamedata")
         save = QAction("Save", self)
         save.setShortcut("Ctrl+S")
         file.addAction(save)
@@ -45,24 +46,18 @@ class MainWindow(QMainWindow):
         file.addAction(exit_action)
         file.triggered[QAction].connect(self.process_trigger)
 
-        # self.save_dir = None
         # Add main widget
         self.window_widget = MyWindowWidget(self)
         self.setCentralWidget(self.window_widget)
         self.show()
 
     def open_file_name_dialog(self, read):
-        # if read or (not read and self.save_dir is None):
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.DirectoryOnly)
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
         dirpath = file_dialog.getExistingDirectory(self, "QFileDialog.getExistingDirectory()",
                                                    os.getcwd(), options=options)
-        #     if not read:
-        #         self.save_dir = dirpath
-        # else:
-        #     dirpath = self.save_dir
         if not dirpath:
             return
 
@@ -70,13 +65,15 @@ class MainWindow(QMainWindow):
 
     def process_trigger(self, q):
         if q.text() == "Open":
-            self.open_file_name_dialog(True)
+            self.open_file_name_dialog("read")
         if q.text() == "Simple":
             global simple_view
             simple_view = q.isChecked()
             self.window_widget.update_layout()
         if q.text() == "Save":
-            self.open_file_name_dialog(False)
+            self.open_file_name_dialog("write")
+        if q.text() == "Read gamedata":
+            self.open_file_name_dialog("gamedata")
 
 
 class MyWindowWidget(QWidget):

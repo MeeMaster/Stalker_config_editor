@@ -272,3 +272,14 @@ parameter_icons = {"health_restore_speed": (498, 110),
                    "fire_wound": (538, 170),
                    "additional_weight": (538, 190),
 }
+
+sections = {"Ammo": ['ammo', 'ammo_bad', 'ammo_damaged'],
+            "Armor": ['headgear', 'outfits', 'outfits_ecolog'],
+            "Artifacts": ['artefacts', 'mutant_parts', 'artefacts_h'],
+            "Consumables": ['drugs', 'cigs', 'drinks', "food", "mutant_parts"],
+            "Devices": ['devices', 'backpacks'],
+            "Equipment": ['headgear', 'outfits', 'outfits_ecolog'],
+            "Tools": ['tools', 'repair_kits', 'upgrade_items', "parts", "toolkits_h"],
+            "Weapons": ['pistols', 'rifles', 'melee', "explosives"],
+            "Other": ['money', 'camping', 'common_stock', "misc", "unused"]
+            }

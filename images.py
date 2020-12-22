@@ -1,7 +1,7 @@
 from constants import parameter_icons
-from PIL import Image
-from io import BytesIO
-from PyQt5.QtGui import QPixmap, QImage
+# from PIL import Image
+# from io import BytesIO
+from PyQt5.QtGui import QPixmap#, QImage
 from os import path
 from file_reader import split_all
 
@@ -9,29 +9,21 @@ icons = None
 status_icons = None
 
 
-def load_equipment_icons(dirpath):
+def load_equipment_icons():
     global icons
-    final_path = path.join(*split_all(dirpath), "textures", "ui", "ui_icon_equipment.dds")
-    if not path.exists(final_path):
-        if not path.exists(path.join("pics", "ui_icon_equipment.dds")):
-            return
-        final_path = path.join("pics", "ui_icon_equipment.dds")
-    icons = Image.open(final_path)
+    final_path = path.join("pics", "ui_icon_equipment.png")
+    icons = QPixmap(final_path)
 
 
-def load_status_icons(dirpath):
+def load_status_icons():
     global status_icons
-    final_path = path.join(*split_all(dirpath), "textures", "ui", "ui_hud.dds")
-    if not path.exists(final_path):
-        if not path.exists(path.join("pics", "ui_hud.dds")):
-            return
-        final_path = path.join("pics", "ui_hud.dds")
-    status_icons = Image.open(final_path)
+    final_path = path.join("pics", "ui_hud.png")
+    status_icons = QPixmap(final_path)
 
 
-def load_all_icons(dirpath):
-    load_equipment_icons(dirpath)
-    load_status_icons(dirpath)
+def load_all_icons():
+    load_equipment_icons()
+    load_status_icons()
 
 
 def get_icon_data(item_entry):
@@ -62,33 +54,16 @@ def load_hud_icon(name):
         return None
     start_x, start_y = parameter_icons[name]
     grid_size = 18
-    icon = status_icons.crop((start_x,
-                              start_y,
-                              (start_x+grid_size),
-                              (start_y+grid_size))
-                             )
-    with BytesIO() as f:
-        icon.save(f, format='png')
-        f.seek(0)
-        image_data = f.read()
-        qimg = QImage.fromData(image_data)
-        patch_qt = QPixmap.fromImage(qimg)
-    return patch_qt
+    copy = status_icons.copy(start_x, start_y, grid_size, grid_size)
+    return copy
 
 
 def load_icon(start_x, start_y, size_x, size_y):
     if icons is None:
         return None
     grid_size = 50
-    icon = icons.crop((start_x * grid_size,
-                       start_y * grid_size,
-                       (start_x+size_x) * grid_size,
-                       (start_y+size_y) * grid_size)
-                      )
-    with BytesIO() as f:
-        icon.save(f, format='png')
-        f.seek(0)
-        image_data = f.read()
-        qimg = QImage.fromData(image_data)
-        patch_qt = QPixmap.fromImage(qimg)
-    return patch_qt
+    copy = icons.copy(start_x * grid_size,
+                      start_y * grid_size,
+                      size_x * grid_size,
+                      size_y * grid_size)
+    return copy

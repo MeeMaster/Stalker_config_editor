@@ -6,6 +6,7 @@ from description_reader import translated_names, translated_descriptions, read_d
 from file_reader import Reader
 from window import MainWindow
 from images import *
+from constants import sections
 
 
 class DataHandler:
@@ -18,21 +19,21 @@ class DataHandler:
         # self.df = None
 
     def load_all_files(self, dirpath):
-        self.reader.set_dirpath(dirpath)
-        self.load_all_configs()
-        self.reader.get_item_types()
+        # self.reader.set_dirpath(dirpath)
+        self.load_all_configs(dirpath)
+        self.reader.get_item_types(dirpath)
         read_descriptions(dirpath, self.reader.entries)
-        self.get_descriptions(dirpath)
+        self.get_descriptions()
         self.get_all_items_data()
-        load_all_icons(dirpath)
+        load_all_icons()
 
-    def get_descriptions(self, dirpath):
+    def get_descriptions(self):
         self.names = translated_names
         self.descriptions = translated_descriptions
 
-    def load_all_configs(self):
-        self.reader.read_all_files()
-        self.reader.read_items()
+    def load_all_configs(self, dirpath):
+        self.reader.read_all_files(dirpath)
+        self.reader.read_items(dirpath)
 
     def get_items_with_prop(self, prop):
         return [entry for name, entry in self.reader.entries.items() if entry.has_property(prop)]
@@ -67,6 +68,9 @@ class DataHandler:
 
     def write_all(self, dirpath):
         self.reader.write_all(dirpath)
+
+    def read_gamedata(self, dirpath):
+        self.reader.read_gamedata(dirpath)
 
 
 class App:
@@ -118,10 +122,12 @@ class App:
         self.main_widget.icon_widget.load_entry(self.data_handler.get_item(self.current_item))
 
     def read_files(self, dirpath, read):
-        if read:
+        if read == "read":
             self.data_handler.load_all_files(dirpath)
-        else:
+        elif read == "write":
             self.write_all_files(dirpath)
+        elif read == "gamedata":
+            self.data_handler.read_gamedata(dirpath)
 
     def display_item_list(self, item_dict):
         self.main_widget.display_item_list(item_dict)
@@ -132,29 +138,12 @@ class App:
     def change_section(self, current_section):
         all_items = self.data_handler.get_grouped_name_dict()
         current_dict = {}
-        if current_section == "Ammo":
-            target_parts = ['ammo', 'ammo_bad', 'ammo_damaged']
-        if current_section == "Armor":
-            target_parts = ['headgear', 'outfits', 'outfits_ecolog']
-        if current_section == "Artifacts":
-            target_parts = ['artefacts', 'mutant_parts', 'artefacts_h']
-        if current_section == "Consumables":
-            target_parts = ['drugs', 'cigs', 'drinks', "food", "mutant_parts"]
-        if current_section == "Devices":
-            target_parts = ['devices', 'backpacks']
-        if current_section == "Equipment":
-            target_parts = ['headgear', 'outfits', 'outfits_ecolog']
-        if current_section == "Tools":
-            target_parts = ['tools', 'repair_kits', 'upgrade_items', "parts", "toolkits_h"]
-        if current_section == "Weapons":
-            target_parts = ['pistols', 'rifles', 'melee', "explosives"]
-        if current_section == "Other":
-            target_parts = ['money', 'camping', 'common_stock', "misc", "unused"]
+        if current_section in sections:
+            target_parts = sections[current_section]
         for part in target_parts:
             if part not in all_items:
                 continue
             current_dict[part] = all_items[part]
-
         self.display_item_list(current_dict)
 
 
