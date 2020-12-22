@@ -122,6 +122,7 @@ def get_descriptions_from_file(filepath):
             names[_id] = child2.text
     return names, descriptions
 
+
 if __name__ == "__main__":
     read_descriptions()
     print(translated_names)

@@ -3,7 +3,7 @@ import sys
 from PyQt5.QtWidgets import QApplication
 
 from description_reader import translated_names, translated_descriptions, read_descriptions
-from file_reader import Reader
+from file_reader import *
 from window import MainWindow
 from images import *
 from constants import sections
@@ -11,18 +11,56 @@ from constants import sections
 
 class DataHandler:
     def __init__(self):
-        self.reader = Reader()
-        self.names = {}
-        self.descriptions = {}
-        self.item_name_xml_dict = {}
-        self.dict = {}
-        # self.df = None
+        self.reset()
+
+    def get_all_item_properties(self, item):
+        fetched_entries = {}
+
+        def get_parent_data(parent_item, level=1):
+            parents = self.entries[parent_item].parents
+            if level not in fetched_entries:
+                fetched_entries[level] = {}
+            if parents is None:
+                return
+            for parent in parents:
+                if parent not in self.entries:
+                    continue
+                new_dict = self.entries[parent]
+                for entry in new_dict.properties:
+                    fetched_entries[level][entry] = new_dict.properties[entry]
+                get_parent_data(parent, level + 1)
+
+        get_parent_data(item)
+
+        for level in sorted(fetched_entries.keys(), reverse=True):
+            for entry in fetched_entries[level]:
+                if entry in self.entries[item].properties and level >= self.entries[item].properties[entry].level:
+                    continue
+                self.entries[item].properties[entry] = fetched_entries[level][entry]
+                self.entries[item].properties[entry].level = level
+
+        if self.entries[item].has_property("hit_absorbation_sect"):
+            sect = self.entries[item].properties["hit_absorbation_sect"].value[0]
+            level = self.entries[item].properties["hit_absorbation_sect"].level
+            for entry in self.entries[sect].properties:
+                if entry in self.entries[item].properties and level >= self.entries[item].properties[entry].level:
+                    continue
+                self.entries[item].properties[entry] = self.entries[sect].properties[entry]
+                self.entries[item].properties[entry].level = level + 1
+
+        if self.entries[item].has_property("immunities_sect"):
+            sect = self.entries[item].properties["immunities_sect"].value[0]
+            level = self.entries[item].properties["immunities_sect"].level
+            for entry in self.entries[sect].properties:
+                if entry in self.entries[item].properties and level >= self.entries[item].properties[entry].level:
+                    continue
+                self.entries[item].properties[entry] = self.entries[sect].properties[entry]
+                self.entries[item].properties[entry].level = level + 1
 
     def load_all_files(self, dirpath):
-        # self.reader.set_dirpath(dirpath)
         self.load_all_configs(dirpath)
-        self.reader.get_item_types(dirpath)
-        read_descriptions(dirpath, self.reader.entries)
+        self.item_groups, self.item_types = get_item_types(dirpath)
+        read_descriptions(dirpath, self.entries)
         self.get_descriptions()
         self.get_all_items_data()
         load_all_icons()
@@ -32,25 +70,34 @@ class DataHandler:
         self.descriptions = translated_descriptions
 
     def load_all_configs(self, dirpath):
-        self.reader.read_all_files(dirpath)
-        self.reader.read_items(dirpath)
+        files, entries = read_all_files(dirpath)
+        for filename, file_entry in files.items():
+            self.files[filename] = file_entry
+        for entry_name, entry in entries.items():
+            self.entries[entry_name] = entry
+        file_entry, entries = read_items(dirpath)
+        if file_entry is None or entries is None:
+            return
+        self.files[file_entry.path] = file_entry
+        for entry_name, entry in entries.items():
+            self.entries[entry_name] = entry
 
     def get_items_with_prop(self, prop):
-        return [entry for name, entry in self.reader.entries.items() if entry.has_property(prop)]
+        return [entry for name, entry in self.entries.items() if entry.has_property(prop)]
 
     def get_item(self, item_name):
-        return self.reader.entries[item_name] if item_name in self.reader.entries else None
+        return self.entries[item_name] if item_name in self.entries else None
 
     def get_items(self, items):
-        return [entry for name, entry in self.reader.entries.items() if name in items]
+        return [entry for name, entry in self.entries.items() if name in items]
 
     def get_all_item_data(self, name):
-        self.reader.get_all_item_properties(name)
-        item_dict = self.reader.entries[name]
+        self.get_all_item_properties(name)
+        item_dict = self.entries[name]
         return item_dict
 
     def change_item_value(self, name, prop_name, new_value):
-        self.reader.entries[name].change_value(prop_name, new_value)
+        self.entries[name].change_value(prop_name, new_value)
 
     def get_item_name(self, item):
         name_tag = self.item_name_xml_dict[item][0] if item in self.item_name_xml_dict else None
@@ -59,18 +106,38 @@ class DataHandler:
         return translated_names[name_tag] if name_tag in translated_names else None
 
     def get_grouped_name_dict(self):
-        output_dict = self.reader.get_grouped_name_dict()
+        output_dict = get_grouped_name_dict(self.item_types)
         return output_dict
 
     def get_all_items_data(self):
-        for entry in self.reader.entries:
-            self.reader.get_all_item_properties(entry)
+        for entry in self.entries:
+            self.get_all_item_properties(entry)
 
     def write_all(self, dirpath):
-        self.reader.write_all(dirpath)
+        write_all(self.files, dirpath)
 
     def read_gamedata(self, dirpath):
-        self.reader.read_gamedata(dirpath)
+        if not self.files:
+            return
+        self.load_all_configs(dirpath)
+        item_groups, item_types = get_item_types(dirpath)
+        for item_group_name, item in item_groups.items():
+            self.item_groups[item_group_name] = item
+        for item_types_name, item in item_types.items():
+            self.item_types[item_types_name] = item
+        read_descriptions(dirpath, self.entries)
+        self.get_descriptions()
+        self.get_all_items_data()
+
+    def reset(self):
+        self.names = {}
+        self.descriptions = {}
+        self.item_name_xml_dict = {}
+        self.dict = {}
+        self.entries = {}
+        self.item_types = {}
+        self.item_groups = {}
+        self.files = {}
 
 
 class App:
@@ -123,6 +190,7 @@ class App:
 
     def read_files(self, dirpath, read):
         if read == "read":
+            self.data_handler.reset()
             self.data_handler.load_all_files(dirpath)
         elif read == "write":
             self.write_all_files(dirpath)
@@ -138,6 +206,7 @@ class App:
     def change_section(self, current_section):
         all_items = self.data_handler.get_grouped_name_dict()
         current_dict = {}
+        target_parts = []
         if current_section in sections:
             target_parts = sections[current_section]
         for part in target_parts:
