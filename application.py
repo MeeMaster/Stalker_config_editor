@@ -11,7 +11,24 @@ from constants import sections
 
 class DataHandler:
     def __init__(self):
-        self.reset()
+        self.names = {}
+        self.descriptions = {}
+        self.item_name_xml_dict = {}
+        self.dict = {}
+        self.entries = {}
+        self.item_types = {}
+        self.item_groups = {}
+        self.files = {}
+
+    def reset(self):
+        self.names = {}
+        self.descriptions = {}
+        self.item_name_xml_dict = {}
+        self.dict = {}
+        self.entries = {}
+        self.item_types = {}
+        self.item_groups = {}
+        self.files = {}
 
     def get_all_item_properties(self, item):
         fetched_entries = {}
@@ -59,7 +76,11 @@ class DataHandler:
 
     def load_all_files(self, dirpath):
         self.load_all_configs(dirpath)
-        self.item_groups, self.item_types = get_item_types(dirpath)
+        item_groups, item_types = get_item_types(dirpath)
+        for item_group_name, item in item_groups.items():
+            self.item_groups[item_group_name] = item
+        for item_types_name, item in item_types.items():
+            self.item_types[item_types_name] = item
         read_descriptions(dirpath, self.entries)
         self.get_descriptions()
         self.get_all_items_data()
@@ -119,25 +140,49 @@ class DataHandler:
     def read_gamedata(self, dirpath):
         if not self.files:
             return
-        self.load_all_configs(dirpath)
-        item_groups, item_types = get_item_types(dirpath)
-        for item_group_name, item in item_groups.items():
-            self.item_groups[item_group_name] = item
-        for item_types_name, item in item_types.items():
-            self.item_types[item_types_name] = item
-        read_descriptions(dirpath, self.entries)
-        self.get_descriptions()
-        self.get_all_items_data()
+        self.load_all_files(dirpath)
 
-    def reset(self):
-        self.names = {}
-        self.descriptions = {}
-        self.item_name_xml_dict = {}
-        self.dict = {}
-        self.entries = {}
-        self.item_types = {}
-        self.item_groups = {}
-        self.files = {}
+    def get_items_of_type(self, type_name):
+        return [entry for name, entry in self.entries.items() if entry.has_parent(type_name)]
+
+    def get_craft_info(self, name_tag):
+        disassembly = {}
+        conditional = self.entries["con_parts_list"]
+        if name_tag in conditional.properties:
+            for entry in self.get_items(conditional.properties[name_tag].value):
+                craft_entry = CraftingEntry()
+                craft_entry.fixed_quantity = True
+                craft_entry.set_entry(entry)
+                disassembly[entry.name] = craft_entry
+
+        unconditional = self.entries["nor_parts_list"]
+        if name_tag in unconditional.properties:
+            for entry in self.get_items(unconditional.properties[name_tag].value):
+                if entry.name in disassembly:
+                    disassembly[entry.name].add()
+                    continue
+                craft_entry = CraftingEntry()
+                craft_entry.set_entry(entry)
+                disassembly[entry.name] = craft_entry
+
+        crafting = {}
+        tier = 0
+        required_recipe = None
+        for craft_type in range(1, 7):
+            for item_name in self.entries[str(craft_type)].properties:
+                if name_tag in item_name:
+                    crafting_line = self.entries[str(craft_type)].properties[item_name].value
+                    tier = int(crafting_line.pop(0))
+                    required_recipe = crafting_line.pop(0)
+                    while crafting_line:
+                        item = self.get_item(crafting_line.pop(0))
+                        craft_entry = CraftingEntry()
+                        craft_entry.set_entry(item)
+                        item_quantity = crafting_line.pop(0)
+                        craft_entry.quantity = int(item_quantity)
+                        crafting[craft_entry.name] = craft_entry
+
+        return {"craft_requirements": (tier, required_recipe), "craft": crafting, "disassemble": disassembly}
 
 
 class App:
@@ -167,8 +212,11 @@ class App:
 
     def display_data_for_item(self, item_tag):
         self.current_item = item_tag
+
         item_dict = self.data_handler.get_all_item_data(item_tag)
         self.main_widget.display_value_data(item_dict)
+        crafting_info = self.data_handler.get_craft_info(item_tag)
+        self.main_widget.craft_view.fill_values(crafting_info)
         # icon = load_icon_from_entry(item_dict)
         # name = translated_names[item_tag]
         self.main_widget.icon_widget.load_entry(item_dict)
@@ -176,13 +224,22 @@ class App:
     def change_tab(self, index):
         self.current_tab = index
 
-    def fill_window(self, window, name, is_type):
-        if is_type:
-            entries = self.data_handler.get_items_with_prop(name)
-            window.set_available_entries(entries)
-        else:
-            entries = self.data_handler.get_items(name.split(","))
+    def fill_window(self, window, name, data_type):  ### TODO: Fix this so that the signal comes from particular gridview, not the entire popup
+        if data_type == "prop":
+            all_entries = []
+            for n in name:
+                entries = self.data_handler.get_items_with_prop(n)
+                all_entries += entries
+            window.set_available_entries(all_entries)
+        elif data_type == "name":
+            entries = self.data_handler.get_items(name)
             window.set_selected_entries(entries)
+        elif data_type == "type":
+            all_entries = []
+            for n in name:
+                entries = self.data_handler.get_items_of_type(n)
+                all_entries += entries
+            window.set_available_entries(all_entries)
 
     def change_value(self, entry_name, new_value):
         self.data_handler.change_item_value(self.current_item, entry_name, new_value)
@@ -219,5 +276,6 @@ class App:
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app_class = App()
+    app_class.read_files("E:/Stalker_modding/unpacked", "read")
     sys.exit(app.exec_())
 

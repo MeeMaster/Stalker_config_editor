@@ -166,7 +166,9 @@ sliders = [
 ]
 
 selections = {
-    "repair_parts_sections": "repair_part_bonus"
+    "repair_parts_sections": ["repair_part_bonus"],
+    "parts": ["tch_part", "tch_junk"],
+    "helmets": ["tch_helmet"]
 }
 
 

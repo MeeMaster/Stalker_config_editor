@@ -102,7 +102,8 @@ def read_file(path, dirpath):
 					parents = [a.strip() for a in parents.split(",")]
 				###
 
-				entry = Entry(name, parents, path, lineno)
+				entry = Entry()
+				entry.load_data(name, parents, path, lineno)
 				entry_line_no = 0
 				continue
 			if entry is None:
@@ -272,16 +273,33 @@ class LineEntry:
 
 
 class Entry:
-	def __init__(self, name, parents, filename, start_line):
-		self.name = name
-		self.parents = parents
-		self.file = filename
-		self.start_line = start_line
+	def __init__(self):
+		self.name = None
+		self.parents = None
+		self.file = None
+		self.start_line = None
 		self.translation = None
 		self.description = None
 		self.entry_type = None
 		self.properties = {}
 		self.comment_lines = {}
+
+	def load_data(self, name, parents, filename, start_line):
+		self.name = name
+		self.parents = parents
+		self.file = filename
+		self.start_line = start_line
+
+	def load_from_entry(self, entry):
+		self.name = entry.name
+		self.parents = entry.parents
+		self.file = entry.file
+		self.start_line = entry.start_line
+		self.translation = entry.translation
+		self.description = entry.description
+		self.entry_type = entry.entry_type
+		self.properties = entry.properties
+		self.comment_lines = entry.comment_lines
 
 	def __repr__(self):
 		lines = []
@@ -363,6 +381,12 @@ class Entry:
 			return "weapon"
 		return "base"
 
+	def has_parent(self, parent):
+		for line_name, line_entry in self.properties.items():
+			if line_entry.name == parent:
+				return True
+		return False
+
 	def get_last_line(self):
 		return max([line_entry.lineno for line_name, line_entry in self.properties.items()] +
 				   list(self.comment_lines.keys()))
@@ -405,6 +429,31 @@ class Entry:
 			if prop.value != prop.default:
 				return True
 		return False
+
+
+class CraftingEntry(Entry):
+
+	def __init__(self):
+		Entry.__init__(self)
+		self.quantity = 0
+		self.fixed_quantity = False
+
+	def set_entry(self, entry):
+		self.load_from_entry(entry)
+		self.quantity = 1
+		self.name = entry.name
+
+	def add(self, value=1):
+		if self.fixed_quantity:
+			return
+		self.quantity += value
+
+	def remove(self, value=1):
+		if self.fixed_quantity:
+			return
+		self.quantity -= value
+		if self.quantity < 0:
+			self.quantity = 0
 
 
 # if __name__ == "__main__":
