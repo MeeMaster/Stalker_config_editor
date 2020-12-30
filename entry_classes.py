@@ -226,7 +226,7 @@ class Entry:
             output.append("; Added properties")
             for entry in added_lines:
                 output.append(entry.write())
-        output.append(";;--==========================================================================")
+            output.append(";;--==========================================================================")
         return "\n".join(output)
 
     def is_changed(self):

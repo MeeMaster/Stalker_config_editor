@@ -224,7 +224,7 @@ class MyWindowWidget(QWidget):
                                                        coeff=food_params_coeffs[line_entry.prop]),
                                                partial(calculate_val_to_points,
                                                        coeff=food_params_coeffs[line_entry.prop]))
-                widget = SimpleView(True, recalculation_functions)
+                widget = SimpleView("slider", recalculation_functions)
                 if entry.is_artifact() and line_entry.prop in artifact_units:
                     unit = artifact_units[line_entry.prop]
                     min_val = minimal_values[unit]
@@ -237,11 +237,12 @@ class MyWindowWidget(QWidget):
             elif line_entry.prop in selections:
                 widget = SelectionWidget(line_entry)
                 widget.fill_request.connect(self.send_fill_request)
+            elif line_entry.prop in switches:
+                widget = SimpleView("switch")
             else:
                 widget = SimpleView()
             widget.value_changed.connect(lambda x, y: self.value_changed.emit(x, y))
             item_list_widget_layout.addWidget(widget)
-            # item_type = entry.get_item_type()
             widget.fill_from_input_line(line_entry, entry.get_item_type())
         item_list_widget_layout.addStretch()
         item_list_widget.setLayout(item_list_widget_layout)
