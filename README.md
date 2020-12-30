@@ -1,5 +1,5 @@
 # Stalker_config_editor
-As of now, the only option is to modify item properties, however I am working on additional functionality, such as trade and crafting modification.
+As of now, the only option is to modify item properties and simple crafting modifications, however I am working on additional functionality, such as trade and more extensive crafting modification.
 To load configs, go to `File->Open` and then select the folder with your unpacked STALKER .db files
 
 Next, you will see the list of items on the left side, after you selected a subcategory.After clicking an item, a display will be shown for items properties.
