@@ -2,7 +2,8 @@ import sys
 
 from PyQt5.QtWidgets import QApplication
 
-from description_reader import translated_names, translated_descriptions, read_descriptions
+from description_reader import translated_descriptions, read_descriptions
+from entry_classes import CraftingEntry
 from file_reader import *
 from window import MainWindow
 from images import *
@@ -110,7 +111,7 @@ class DataHandler:
         return self.entries[item_name] if item_name in self.entries else None
 
     def get_items(self, items):
-        return [entry for name, entry in self.entries.items() if name in items]
+        return [self.entries[name] for name in items if name in self.entries]
 
     def get_all_item_data(self, name):
         self.get_all_item_properties(name)
@@ -145,13 +146,37 @@ class DataHandler:
     def get_items_of_type(self, type_name):
         return [entry for name, entry in self.entries.items() if entry.has_parent(type_name)]
 
+    def get_crafting_recipes(self,  name_tag):
+        entry_lines = []
+        for craft_type in range(1, 7):
+            for item_name in self.entries[str(craft_type)].properties:
+                if name_tag in item_name:
+                    entry_lines.append(self.entries[str(craft_type)].properties[item_name])
+        return entry_lines
+
+    def remove_line(self, entry_name, line_name):
+        if entry_name not in self.entries:
+            return
+        if line_name not in self.entries[entry_name]:
+            return
+        del self.entries[entry_name].properties[line_name]
+        self.entries[entry_name].changed = True
+
+    def add_line(self, entry_name, line):
+        if entry_name not in self.entries:
+            return
+        self.entries[entry_name].properties[line.prop] = line.copy()
+        self.entries[entry_name].changed = True
+
     def get_craft_info(self, name_tag):
         disassembly = {}
+        is_conditional = False
         conditional = self.entries["con_parts_list"]
         if name_tag in conditional.properties:
+            is_conditional = True
             for entry in self.get_items(conditional.properties[name_tag].value):
                 craft_entry = CraftingEntry()
-                craft_entry.fixed_quantity = True
+                # craft_entry.fixed_quantity = True
                 craft_entry.set_entry(entry)
                 disassembly[entry.name] = craft_entry
 
@@ -166,23 +191,33 @@ class DataHandler:
                 disassembly[entry.name] = craft_entry
 
         crafting = {}
-        tier = 0
-        required_recipe = None
+        final_craft_type = None
         for craft_type in range(1, 7):
             for item_name in self.entries[str(craft_type)].properties:
                 if name_tag in item_name:
-                    crafting_line = self.entries[str(craft_type)].properties[item_name].value
+                    craft_dict = {"craft_requirements": None, "entries": {}}
+                    final_craft_type = craft_type
+                    crafting_line = list(self.entries[str(craft_type)].properties[item_name].value)
                     tier = int(crafting_line.pop(0))
-                    required_recipe = crafting_line.pop(0)
+
+                    rec_entry = self.get_item(crafting_line.pop(0))
+                    if rec_entry is not None:
+                        required_recipe = CraftingEntry()
+                        required_recipe.load_from_entry(rec_entry)
+                        required_recipe.quantity = 1
+                    else:
+                        required_recipe = None
+                    craft_dict["craft_requirements"] = (tier, required_recipe)
                     while crafting_line:
                         item = self.get_item(crafting_line.pop(0))
                         craft_entry = CraftingEntry()
                         craft_entry.set_entry(item)
                         item_quantity = crafting_line.pop(0)
                         craft_entry.quantity = int(item_quantity)
-                        crafting[craft_entry.name] = craft_entry
-
-        return {"craft_requirements": (tier, required_recipe), "craft": crafting, "disassemble": disassembly}
+                        craft_dict["entries"][craft_entry.name] = craft_entry
+                    crafting[item_name] = craft_dict
+        return {"craft_type": final_craft_type, "craft": crafting,
+                "disassemble": disassembly, "conditional": is_conditional}
 
 
 class App:
@@ -205,10 +240,58 @@ class App:
         self.main_widget.value_changed.connect(self.change_value)
         # Register fill request
         self.main_widget.fill_request.connect(self.fill_window)
-        # Regiser tab change
+        # fill_request.connect(self.fill_window)
+        # Register tab change
         self.main_widget.tab_change.connect(self.change_tab)
+        # Register crafting update
+        self.main_widget.craft_update.connect(self.update_crafting)
+
         # Register save signal
         # self.main_window.save_data.connect(self.write_all_files)
+
+    def update_crafting(self, crafting_dict):
+        craft_lines = self.data_handler.get_crafting_recipes(self.current_item)
+
+        for craft_line in craft_lines:
+            if craft_line.prop not in crafting_dict["craft"]:
+                self.data_handler.remove_line(craft_line.name, craft_line.prop)
+
+        mock_craft_line = LineEntry(file=self.data_handler.entries["1"].file,
+                                    lineno=-1,
+                                    name="",
+                                    prop="",
+                                    value=[],
+                                    comment="")
+
+        for entry_name in crafting_dict["craft"]:
+            mock_line = mock_craft_line.copy()
+            mock_line.name = str(crafting_dict["craft_type"])
+            mock_line.prop = entry_name
+            booklet = crafting_dict["craft"][entry_name]["craft_requirements"][1]
+            if booklet is None:
+                booklet = "recipe_basic_0"
+            else:
+                booklet = booklet.name
+            mock_line.value = [str(crafting_dict["craft"][entry_name]["craft_requirements"][0]), booklet]
+            for entry_n, entry in crafting_dict["craft"][entry_name]["entries"].items():
+                mock_line.value.append(entry_n)
+                mock_line.value.append(str(entry.quantity))
+            self.data_handler.add_line(mock_line.name, mock_line)  # adds or replaces the line
+
+        if not crafting_dict["disassemble"]:
+            return
+        mock_craft_line = LineEntry(file=self.data_handler.entries["con_parts_list"].file,
+                                    lineno=-1,
+                                    name="",
+                                    prop="",
+                                    value=[],
+                                    comment="")
+        entry_name = "con_parts_list" if crafting_dict["conditional"] else "nor_parts_list"
+        mock_craft_line.name = entry_name
+        mock_craft_line.prop = self.current_item
+        for part_name, part in crafting_dict["disassemble"].items():
+            mock_craft_line.value.extend([part_name] * part.quantity)
+        self.data_handler.add_line(mock_craft_line.name, mock_craft_line)
 
     def display_data_for_item(self, item_tag):
         self.current_item = item_tag
@@ -276,6 +359,6 @@ class App:
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app_class = App()
-    app_class.read_files("E:/Stalker_modding/unpacked", "read")
+    # app_class.read_files("E:/Stalker_modding/unpacked", "read")
     sys.exit(app.exec_())
 

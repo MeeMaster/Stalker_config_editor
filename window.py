@@ -51,12 +51,12 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.window_widget)
         self.show()
 
-    def open_file_name_dialog(self, read):
+    def open_file_name_dialog(self, read, title):
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.DirectoryOnly)
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        dirpath = file_dialog.getExistingDirectory(self, "QFileDialog.getExistingDirectory()",
+        dirpath = file_dialog.getExistingDirectory(self, title,
                                                    os.getcwd(), options=options)
         if not dirpath:
             return
@@ -65,15 +65,15 @@ class MainWindow(QMainWindow):
 
     def process_trigger(self, q):
         if q.text() == "Open":
-            self.open_file_name_dialog("read")
+            self.open_file_name_dialog("read", "Select directory with unpacked databases")
         if q.text() == "Simple":
             global simple_view
             simple_view = q.isChecked()
             self.window_widget.update_layout()
         if q.text() == "Save":
-            self.open_file_name_dialog("write")
+            self.open_file_name_dialog("write", "Select write destination")
         if q.text() == "Read gamedata":
-            self.open_file_name_dialog("gamedata")
+            self.open_file_name_dialog("gamedata", "Select gamedata directory")
 
 
 class MyWindowWidget(QWidget):
@@ -82,6 +82,7 @@ class MyWindowWidget(QWidget):
     value_changed = pyqtSignal(str, str)
     fill_request = pyqtSignal(object, list, str)
     tab_change = pyqtSignal(int)
+    craft_update = pyqtSignal(dict)
 
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
@@ -135,6 +136,7 @@ class MyWindowWidget(QWidget):
         self.craft_tab_layout = QVBoxLayout()
         self.craft_view = CraftingView()
         self.craft_view.fill_request.connect(self.send_fill_request)
+        self.craft_view.value_change.connect(self.update_crafting)
         self.craft_tab_layout.addWidget(self.craft_view)
         self.crafting_tab.setLayout(self.craft_tab_layout)
 
@@ -143,6 +145,9 @@ class MyWindowWidget(QWidget):
         self.images_layout.addWidget(self.icon_widget)
 
         self.update_layout()
+
+    def update_crafting(self, crafting_info):
+        self.craft_update.emit(crafting_info)
 
     def update_layout(self):
         self.setLayout(self.main_layout)

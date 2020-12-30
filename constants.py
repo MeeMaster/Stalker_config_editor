@@ -88,9 +88,13 @@ simple_categories = {"inv_weight": "Weight",
                      "boost_radiation_protection": "Radiation protection",
                      "boost_telepat_protection": "Telepathy protection",
                      "boost_chemburn_protection": "Toxicity protection",
-
-
+                     "k_disp": "Ammo dispersion factor",
+                     "k_hit": "Hit damage modification factor",
+                     "k_impulse": "Stagger impulse",
+                     "k_ap": "Armor penetration factor",
+                     "impair": "Weapon wear factor"
                      }
+
 
 artifact_simple_names = {"burn_immunity": "Burn damage protection",
                          "telepatic_immunity": "Telepathic damage protection",
@@ -165,10 +169,24 @@ sliders = [
     'boost_health_restore',
 ]
 
+switches = ["sprint_allowed",
+            "helmet_available",
+            "backpack_available",
+            "cooking_part",
+            "allow_repair",
+            "use_condition",
+            "dont_stack",
+            "remove_after_use",
+            "can_trade",
+            "default_to_ruck",
+            ]
+
 selections = {
     "repair_parts_sections": ["repair_part_bonus"],
     "parts": ["tch_part", "tch_junk"],
-    "helmets": ["tch_helmet"]
+    "helmets": ["tch_helmet"],
+    "booklets": ["tch_letter"],
+    "all": ["identity_immunities"]
 }
 
 
@@ -280,7 +298,6 @@ sections = {"Ammo": ['ammo', 'ammo_bad', 'ammo_damaged'],
             "Artifacts": ['artefacts', 'mutant_parts', 'artefacts_h'],
             "Consumables": ['drugs', 'cigs', 'drinks', "food", "mutant_parts"],
             "Devices": ['devices', 'backpacks'],
-            "Equipment": ['headgear', 'outfits', 'outfits_ecolog'],
             "Tools": ['tools', 'repair_kits', 'upgrade_items', "parts", "toolkits_h"],
             "Weapons": ['pistols', 'rifles', 'melee', "explosives"],
             "Other": ['money', 'camping', 'common_stock', "misc", "unused"]
