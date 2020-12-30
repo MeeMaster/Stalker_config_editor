@@ -674,6 +674,7 @@ class SimpleView(QWidget):
             self.default.setText(",".join(line_entry.value))
         elif self.view_type == "switch":
             self.value.set_default(line_entry.value[0])
+            self.default.setText(",".join(line_entry.value))
 
     def change_value(self, value=None):
         if self.view_type == "slider":
