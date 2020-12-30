@@ -92,7 +92,17 @@ simple_categories = {"inv_weight": "Weight",
                      "k_hit": "Hit damage modification factor",
                      "k_impulse": "Stagger impulse",
                      "k_ap": "Armor penetration factor",
-                     "impair": "Weapon wear factor"
+                     "impair": "Weapon wear factor",
+                     "sprint_allowed": "Sprint allowed",
+                     "helmet_avaliable": "Allows to wear helmet",
+                     "backpack_avaliable": "Allows to wear backpack",
+                     "cooking_part": "Can be used for cooking",
+                     "allow_repair": "Can be repaired",
+                     "use_condition": "Can deteriorate",
+                     "dont_stack": "Disallow stacking",
+                     "remove_after_use": "Remove after use",
+                     "can_trade": "Can be traded",
+                     "default_to_ruck": "Move to backpack after picking up",
                      }
 
 
@@ -170,8 +180,8 @@ sliders = [
 ]
 
 switches = ["sprint_allowed",
-            "helmet_available",
-            "backpack_available",
+            "helmet_avaliable",
+            "backpack_avaliable",
             "cooking_part",
             "allow_repair",
             "use_condition",

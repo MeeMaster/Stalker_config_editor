@@ -571,15 +571,50 @@ class CraftingSelectionWidget(SelectionWidget):
         self.value_changed.emit(value)
 
 
+class TrueFalseSwitch(QWidget):
+    value_changed = pyqtSignal(str)
+
+    def __init__(self):
+        QWidget.__init__(self)
+        layout = QHBoxLayout()
+        self.setLayout(layout)
+        self.yes_button = QPushButton("Yes")
+        layout.addWidget(self.yes_button)
+        self.yes_button.clicked.connect(self.yes_pushed)
+        self.yes_button.setCheckable(True)
+        self.no_button = QPushButton("No")
+        layout.addWidget(self.no_button)
+        self.no_button.clicked.connect(self.no_pushed)
+        self.no_button.setCheckable(True)
+
+    def yes_pushed(self):
+        self.yes_button.setChecked(True)
+        self.no_button.setChecked(False)
+        self.value_changed.emit("true")
+
+    def no_pushed(self):
+        self.yes_button.setChecked(False)
+        self.no_button.setChecked(True)
+        self.value_changed.emit("false")
+
+    def set_default(self, value):
+        if value == "true":
+            self.yes_button.setChecked(True)
+            self.no_button.setChecked(False)
+        elif value == "false":
+            self.yes_button.setChecked(False)
+            self.no_button.setChecked(True)
+
+
 class SimpleView(QWidget):
     value_changed = pyqtSignal(str, str)
 
-    def __init__(self, slider=False, translation_functions=(None, None)):
+    def __init__(self, view_type="text", translation_functions=(None, None)):
         QWidget.__init__(self)
         layout = QHBoxLayout()
         self.setLayout(layout)
         self.name_box = QLabel()
-        self.is_slider = slider
+        self.view_type = view_type
         self.line_entry = None
         self.translation_functions = translation_functions
 
@@ -588,24 +623,27 @@ class SimpleView(QWidget):
 
         layout.addWidget(self.name_box)
         layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        if slider:
+        if self.view_type == "slider":
             self.value = QSlider(Qt.Horizontal)
             self.value.valueChanged.connect(self.change_value)
-        else:
+        elif self.view_type == "text":
             self.value = QLineEdit()
             self.value.editingFinished.connect(self.change_value)
+        elif self.view_type == "switch":
+            self.value = TrueFalseSwitch()
+            self.value.value_changed.connect(self.change_value)
         self.value.setFixedWidth(400)
         self.default = QLabel()
         self.default.setFixedWidth(70)
         layout.addWidget(self.value)
-        if slider:
+        if self.view_type == "slider":
             self.curr_val = QLabel()
             self.curr_val.setFixedWidth(70)
             layout.addWidget(self.curr_val)
         layout.addWidget(self.default)
 
     def set_min_max_step(self, minimum, maximum, step):
-        if self.is_slider:
+        if self.view_type == "slider":
             self.value.setMinimum(minimum)
             self.value.setMaximum(maximum)
             self.value.setSingleStep(step)
@@ -624,23 +662,25 @@ class SimpleView(QWidget):
             if line_entry.prop in food_units:
                 self.unit_fill = "{} " + food_units[line_entry.prop]
                 self.divider = 1
-        if self.is_slider:
+        if self.view_type == "slider":
             value = float(line_entry.value[0])
             if self.translation_functions[0] is not None:
                 value = self.translation_functions[0](value=float(line_entry.value[0]))
             self.curr_val.setText(self.unit_fill.format(value / self.divider))
             self.default.setText(self.unit_fill.format(value / self.divider))
             self.value.setValue(value)
-        else:
+        elif self.view_type == "text":
             self.value.setText(",".join(line_entry.value))
             self.default.setText(",".join(line_entry.value))
+        elif self.view_type == "switch":
+            self.value.set_default(line_entry.value[0])
 
     def change_value(self, value=None):
-        if self.is_slider:
+        if self.view_type == "slider":
             self.curr_val.setText(self.unit_fill.format(value / self.divider))
             if self.translation_functions[1] is not None:
                 value = self.translation_functions[1](value=value)
-        else:
+        elif self.view_type == "text":
             value = self.value.text()
         value = str(value)
         self.value_changed.emit(self.line_entry.prop, value)
