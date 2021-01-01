@@ -107,7 +107,7 @@ class MyWindowWidget(QWidget):
         # Initialize dropdown box
         self.sections = QComboBox()
         self.sections.addItems(["Ammo", "Armor", "Artifacts", "Consumables",
-                                "Devices", "Equipment", "Tools", "Weapons", "Other"])
+                                "Devices", "Tools", "Weapons", "Other"])
         self.sections.currentIndexChanged.connect(self.change_section)
         self.list_layout.addWidget(self.sections)
         self.item_scroll_widget = QScrollArea()
@@ -227,8 +227,10 @@ class MyWindowWidget(QWidget):
                 widget = SimpleView("slider", recalculation_functions)
                 if entry.is_artifact() and line_entry.prop in artifact_units:
                     unit = artifact_units[line_entry.prop]
-                    min_val = minimal_values[unit]
-                    max_val = maximal_values[unit]
+                    if unit in minimal_values:
+                        min_val = minimal_values[unit]
+                    if unit in maximal_values:
+                        max_val = maximal_values[unit]
                 else:
                     min_val = minimal_values[line_entry.prop] if line_entry.prop in minimal_values else -1000.
                     max_val = maximal_values[line_entry.prop] if line_entry.prop in maximal_values else 1000.

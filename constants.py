@@ -103,6 +103,8 @@ simple_categories = {"inv_weight": "Weight",
                      "remove_after_use": "Remove after use",
                      "can_trade": "Can be traded",
                      "default_to_ruck": "Move to backpack after picking up",
+                     "ammo_class": "Type of ammo used",
+                     "silencer_name": "Matching silencer"
                      }
 
 
@@ -196,8 +198,19 @@ selections = {
     "parts": ["tch_part", "tch_junk"],
     "helmets": ["tch_helmet"],
     "booklets": ["tch_letter"],
-    "all": ["identity_immunities"]
+    "all": ["identity_immunities", "outfit_actions", "sect_backpack_immunities"],
+    "tools": ["itm_basickit"],
+    "ammo_class": ["k_bullet_speed"],
+    "silencer_name": ["bullet_hit_power_k"]
 }
+
+
+tools = {1: "itm_basickit",
+         2: "itm_advancedkit",
+         3: "itm_expertkit",
+         4: "itm_drugkit",
+         5: "itm_ammokit",
+         }
 
 
 artifact_params_coeffs = {'telepatic_immunity': 23200,

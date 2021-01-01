@@ -74,6 +74,7 @@ class Entry:
         self.properties = {}
         self.comment_lines = {}
         self.changed = False
+        self.category = None
 
     def load_data(self, name, parents, filename, start_line):
         self.name = name
@@ -91,6 +92,7 @@ class Entry:
         self.entry_type = entry.entry_type
         self.properties = entry.properties
         self.comment_lines = entry.comment_lines
+        self.category = entry.category
 
     def __repr__(self):
         # lines = []
@@ -118,8 +120,14 @@ class Entry:
                 self.properties[prop_name].lineno = -1
                 self.properties[prop_name].file = self.file
 
+    def set_category(self, category):
+        self.category = category
+
     def has_property(self, prop):
         return prop in self.properties
+
+    def is_category(self, category):
+        return self.category == category
 
     def is_artifact(self):
         for entry in self.properties:
@@ -135,7 +143,7 @@ class Entry:
 
     def is_weapon(self):
         for entry in self.properties:
-            if self.properties[entry].name == "outfit_actions":
+            if self.properties[entry].name == "default_weapon_params":
                 return True
         return False
 
