@@ -33,20 +33,6 @@ def remove_dirpath(path, dirpath):
 	return os.path.join(*path)
 
 
-# class Reader:
-#     def __init__(self):
-#         self.dirpath = ""
-#         self.definitions = {}
-#         self.files = {}
-#         self.entries = {}
-#         self.item_types = {}
-#         self.item_groups = {}
-#         self.inheritances = {}
-#         self.object_lists = {}
-
-# def set_dirpath(path):
-# 	self.dirpath = os.path.join(*split_all(path))
-
 def get_item_types(dirpath):
 	item_groups = {}
 	item_types = {}

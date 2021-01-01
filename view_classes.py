@@ -1,8 +1,8 @@
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QGridLayout, QLineEdit, QHBoxLayout, QPushButton, \
-    QSpacerItem, QSizePolicy, QSlider
+    QSpacerItem, QSizePolicy, QSlider, QMenu, QAction, QComboBox
 
-from constants import simple_categories, artifact_simple_names, artifact_units, food_units, selections
+from constants import simple_categories, artifact_simple_names, artifact_units, food_units, selections, sections
 from description_reader import translated_names
 from images import load_icon_from_entry
 from entry_classes import LineEntry
@@ -107,6 +107,7 @@ class SelectionWindow(QWidget):
         self.available_item_scroll_widget.setWidgetResizable(True)
         self.available_items_layout.addWidget(self.available_item_scroll_widget)
         self.available_items_widget = SelectionGridView("Available items")
+        self.available_items_widget.add_filter()
         self.available_items_widget.entry_changed.connect(self.add_entry)
         self.available_item_scroll_widget.setWidget(self.available_items_widget)
         self.main_layout.addLayout(self.available_items_layout, 4)
@@ -159,8 +160,8 @@ class SelectionWindow(QWidget):
         self.update_lists()
 
     def update_lists(self):
-        self.available_items_widget.fill_from_list([item for name, item in self.available_entries.items()])
-        self.selected_items_widget.fill_from_list([item for name, item in self.selected_entries.items()])
+        self.available_items_widget.set_item_list([item for name, item in self.available_entries.items()])
+        self.selected_items_widget.set_item_list([item for name, item in self.selected_entries.items()])
 
     def set_available_entries(self, entries):
         for entry in entries:
@@ -179,13 +180,32 @@ class SelectionGridView(QWidget):
     def __init__(self, label):
         QWidget.__init__(self)
         self.main_layout = QVBoxLayout()
+        self.label_layout = QHBoxLayout()
         self.label = QLabel(label)
         self.label.setStyleSheet("font: bold 16px;")
+        self.label_layout.addWidget(self.label)
+
+        self.name_filter = QLineEdit()
+        self.name_filter.textChanged.connect(self.filter)
+        self.name_filter.setMaximumWidth(150)
+        self.type_filter = ItemTypeSelection()
+        self.type_filter.currentIndexChanged.connect(self.filter)
+
         self.scroll_area = QScrollArea()
         self.grid_layout = QGridLayout()
-        self.main_layout.addWidget(self.label)
+        self.main_layout.addLayout(self.label_layout)
         self.main_layout.addWidget(self.scroll_area)
         self.maxwidth = 6
+        self.current_list = []
+
+    def set_item_list(self, l):
+        self.current_list = l
+        self.filter()
+
+    def add_filter(self):
+        self.label_layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        self.label_layout.addWidget(self.name_filter)
+        self.label_layout.addWidget(self.type_filter)
 
     def fill_from_list(self, l):
         self.grid_layout = QGridLayout()
@@ -206,6 +226,32 @@ class SelectionGridView(QWidget):
 
     def emit_change(self, name):
         self.entry_changed.emit(name)
+
+    def filter(self):
+        curr_text = self.name_filter.text()
+        curr_type = self.type_filter.currentText()
+        available_items = [entry for entry in self.current_list if entry.name in translated_names]
+        if curr_type != "All":
+            available_items = [entry for entry in available_items if entry.is_category(curr_type)]
+        if curr_text:
+            available_items = [entry for entry in available_items if curr_text.lower() in translated_names[entry.name].lower()]
+        self.fill_from_list(available_items)
+
+
+class ItemTypeSelection(QComboBox):
+    value_changed = pyqtSignal(str)
+
+    def __init__(self):
+        QComboBox.__init__(self)
+        self.items = ["All"]
+        for key, values in sections.items():
+            for value in values:
+                self.items.append(value)
+        self.addItems(self.items)
+        # self.currentIndexChanged.connect(self.emit_change)
+
+    # def emit_change(self, index):
+    #     self.value_changed.emit(self.items[index])
 
 
 class CraftingSelectionGridView(SelectionGridView):
@@ -334,13 +380,30 @@ class CraftingView(QWidget):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.global_layout.addWidget(self.scroll_area)
+        self.add_recipe_button = QPushButton("Add recipe")
+        self.add_recipe_button.clicked.connect(self.add_recipe)
+        self.global_layout.addWidget(self.add_recipe_button)
 
         self.main_widget = QWidget()
         self.scroll_area.setWidget(self.main_widget)
         self.main_layout = QVBoxLayout()
         self.main_widget.setLayout(self.main_layout)
-        # for n in range(20):
-        #     self.global_layout.addWidget(QLabel("Dupa"))
+
+    def add_recipe(self):
+        for letter in "abcdefghijklmnopqrstuvwxyz":
+            new_name = letter + "_" + self.crafting_info["item"]
+            if new_name in self.crafting_info["craft"]:
+                continue
+            self.crafting_info["craft"][new_name] = {"craft_requirements": (None, None), "entries": {}}
+            self.fill_values(self.crafting_info)
+            self.send_change()
+            return
+
+    def remove_recipe(self, name):
+        if name in self.crafting_info["craft"]:
+            del self.crafting_info["craft"][name]
+        self.fill_values(self.crafting_info)
+        self.send_change()
 
     def fill_values(self, crafting_info):
         self.clear()
@@ -354,19 +417,39 @@ class CraftingView(QWidget):
             else:
                 booklet = booklet.todict()
 
-            # self.wid = QWidget()
-            # layout = QVBoxLayout()
-            # self.wid.setLayout(layout)
+            toolkit = recipe["craft_requirements"][0]
+            if toolkit is None:
+                toolkit = {}
+            else:
+                toolkit = toolkit.todict()
+
+            wid = CraftingViewWidget()
+            wid.set_item(recipe_name)
+            wid.delete.connect(self.remove_recipe)
             label = QLabel("Recipe #{}".format(counter))
             label.setAlignment(Qt.AlignCenter)
             label.setStyleSheet("font: bold 20px;")
+            wid.layout().addWidget(label)
+
+            local_layout = QHBoxLayout()
             craft_recipe_widget = ComponentDisplay(booklet, "Recipe")
             craft_recipe_widget.set_single_item(True)
             craft_recipe_widget.setMinimumHeight(350)
             craft_recipe_widget.set_part_type("booklets")
+            local_layout.addWidget(craft_recipe_widget)
             craft_recipe_widget.set_recipe_name(recipe_name+"_recipe")
             craft_recipe_widget.value_change.connect(self.change_recipe)
             craft_recipe_widget.fill_request.connect(self.send_fill_request)
+
+            toolkit_widget = ComponentDisplay(toolkit, "Toolkit")
+            toolkit_widget.set_single_item(True)
+            toolkit_widget.setMinimumHeight(350)
+            toolkit_widget.set_part_type("tools")
+            toolkit_widget.set_recipe_name(recipe_name + "_toolkit")
+            toolkit_widget.value_change.connect(self.change_toolkit)
+            toolkit_widget.fill_request.connect(self.send_fill_request)
+            local_layout.addWidget(toolkit_widget)
+            wid.layout().addLayout(local_layout)
 
             crafting_widget = ComponentDisplay(crafting_info["craft"][recipe_name]["entries"], "Crafting")
             crafting_widget.set_single_item(False)
@@ -375,35 +458,56 @@ class CraftingView(QWidget):
             crafting_widget.value_change.connect(self.change_crafting_info)
             crafting_widget.fill_request.connect(self.send_fill_request)
             crafting_widget.set_recipe_name(recipe_name)
+            wid.layout().addWidget(crafting_widget)
 
-            self.main_layout.addWidget(label)
-            self.main_layout.addWidget(craft_recipe_widget)
-            self.main_layout.addWidget(crafting_widget)
-
-            # self.main_layout.addWidget(self.wid)
+            self.main_layout.addWidget(wid)
             counter += 1
 
         disassembly_widget = ComponentDisplay(crafting_info["disassemble"], "Disassembling")
         disassembly_widget.set_single_item(False)
         disassembly_widget.setMinimumHeight(350)
-        disassembly_widget.set_part_type("parts")
-        # disassembly_widget.set_recipe_name("disassemble")
+        disassembly_widget.set_part_type("all")
         disassembly_widget.value_change.connect(self.change_disassembling_info)
         disassembly_widget.fill_request.connect(self.send_fill_request)
-
         self.main_layout.addWidget(disassembly_widget)
+        cond_label = QLabel("Is using item condition")
+        cond_button = TrueFalseSwitch()
+        cond_button.set_default(self.crafting_info["conditional"])
+        cond_button.value_changed.connect(self.switch_conditionality)
+        self.main_layout.addWidget(cond_label)
+        self.main_layout.addWidget(cond_button)
+
         self.main_widget.setLayout(self.main_layout)
         self.update()
 
     def clear(self):
         for i in reversed(range(self.main_layout.count())):
-            self.main_layout.itemAt(i).widget().setParent(None)
+            item = self.main_layout.itemAt(i)
+            if item.widget() is None:
+                layout = item.layout()
+                for j in reversed(range(layout.count())):
+                    widget = layout.itemAt(j).widget()
+                    widget.setParent(None)
+                continue
+            item.widget().setParent(None)
+
+    def switch_conditionality(self, value):
+        self.crafting_info["conditional"] = value
+        self.send_change()
 
     def change_recipe(self, name, value):
         name = name.replace("_recipe", "")
         craft_req = list(self.crafting_info["craft"][name]["craft_requirements"])
 
         craft_req[1] = list(value.values())[0] if list(value.values()) else None
+        self.crafting_info["craft"][name]["craft_requirements"] = tuple(craft_req)
+        self.send_change()
+
+    def change_toolkit(self, name, value):
+        name = name.replace("_toolkit", "")
+        craft_req = list(self.crafting_info["craft"][name]["craft_requirements"])
+
+        craft_req[0] = list(value.values())[0] if list(value.values()) else None
         self.crafting_info["craft"][name]["craft_requirements"] = tuple(craft_req)
         self.send_change()
 
@@ -420,6 +524,38 @@ class CraftingView(QWidget):
 
     def send_change(self):
         self.value_change.emit(self.crafting_info)
+
+
+class CraftingViewWidget(QWidget):
+    delete = pyqtSignal(str)
+
+    def __init__(self):
+        QWidget.__init__(self)
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+        self.menu = QMenu(self)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.menu.addAction(QAction("Remove", self))
+        self.customContextMenuRequested.connect(self.show_header_menu)
+        self.item = None
+
+    def set_item(self, name):
+        self.item = name
+
+    def show_header_menu(self, point):
+        self.menu.triggered[QAction].connect(self.resolve_action)
+        self.menu.exec_(self.mapToGlobal(point))
+
+    def add_header_option(self, option, target):
+        self.menu.addAction(QAction(option, self))
+        self.menu_actions[option] = target
+
+    def resolve_action(self, action):
+        if action.text() == "Remove":
+            self.remove()
+
+    def remove(self):
+        self.delete.emit(self.item)
 
 
 class ComponentDisplay(QWidget):
