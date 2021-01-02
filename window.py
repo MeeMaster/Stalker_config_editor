@@ -106,8 +106,7 @@ class MyWindowWidget(QWidget):
 
         # Initialize dropdown box
         self.sections = QComboBox()
-        self.sections.addItems(["Ammo", "Armor", "Artifacts", "Consumables",
-                                "Devices", "Tools", "Weapons", "Other"])
+
         self.sections.currentIndexChanged.connect(self.change_section)
         self.list_layout.addWidget(self.sections)
         self.item_scroll_widget = QScrollArea()
@@ -145,6 +144,10 @@ class MyWindowWidget(QWidget):
         self.images_layout.addWidget(self.icon_widget)
 
         self.update_layout()
+
+    def set_combo_options(self, items):
+        self.sections.clear()
+        self.sections.addItems(items)
 
     def update_crafting(self, crafting_info):
         self.craft_update.emit(crafting_info)

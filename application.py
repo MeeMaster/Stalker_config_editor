@@ -90,22 +90,37 @@ class DataHandler:
         self.get_grouped_name_dict()
         load_all_icons()
 
+    def read_trade_info(self, dirpath):
+
+        pass
+
     def get_descriptions(self):
         self.names = translated_names
         self.descriptions = translated_descriptions
 
     def load_all_configs(self, dirpath):
-        files, entries = read_all_files(dirpath)
+        files = read_all_files(dirpath)
+        file_entry = read_items(dirpath)
+        if file_entry is not None:
+            self.files[file_entry.path] = file_entry
         for filename, file_entry in files.items():
             self.files[filename] = file_entry
-        for entry_name, entry in entries.items():
-            self.entries[entry_name] = entry
-        file_entry, entries = read_items(dirpath)
-        if file_entry is None or entries is None:
-            return
-        self.files[file_entry.path] = file_entry
-        for entry_name, entry in entries.items():
-            self.entries[entry_name] = entry
+
+        self.entries = self.get_all_entries()
+
+    def get_entries_from_file(self, file_entry):
+        entries = {}
+        for index, entry in file_entry.entries_order.items():
+            entries[entry.name] = entry
+        return entries
+
+    def get_all_entries(self):
+        all_entries = {}
+        for filename, file_entry in self.files.items():
+            entries = self.get_entries_from_file(file_entry)
+            for entry_name, entry in entries.items():
+                all_entries[entry_name] = entry
+        return all_entries
 
     def get_items_with_prop(self, prop):
         return [entry for name, entry in self.entries.items() if entry.has_property(prop)]
@@ -137,7 +152,6 @@ class DataHandler:
                 if entry_name not in self.entries:
                     continue
                 self.entries[entry_name].set_category(item_type)
-        # print(self.grouped_name_dict.keys())
 
     def get_all_items_data(self):
         for entry in self.entries:
@@ -158,7 +172,7 @@ class DataHandler:
         entry_lines = []
         for craft_type in range(1, 7):
             for item_name in self.entries[str(craft_type)].properties:
-                if name_tag in item_name:
+                if name_tag == item_name[2:]:
                     entry_lines.append(self.entries[str(craft_type)].properties[item_name])
         return entry_lines
 
@@ -202,7 +216,7 @@ class DataHandler:
         final_craft_type = None
         for craft_type in range(1, 7):
             for item_name in self.entries[str(craft_type)].properties:
-                if name_tag in item_name:
+                if name_tag == item_name[2:]:
                     craft_dict = {"craft_requirements": None, "entries": {}}
                     final_craft_type = craft_type
                     crafting_line = list(self.entries[str(craft_type)].properties[item_name].value)
@@ -303,6 +317,10 @@ class App:
                                     comment="")
         entry_name = "con_parts_list" if crafting_dict["conditional"] == "true" else "nor_parts_list"
         mock_craft_line.name = entry_name
+        if self.current_item in self.data_handler.entries["con_parts_list"].properties:
+            self.data_handler.remove_line("con_parts_list", self.current_item)
+        if self.current_item in self.data_handler.entries["nor_parts_list"].properties:
+            self.data_handler.remove_line("nor_parts_list", self.current_item)
         mock_craft_line.prop = self.current_item
         for part_name, part in crafting_dict["disassemble"].items():
             mock_craft_line.value.extend([part_name] * part.quantity)
@@ -319,6 +337,13 @@ class App:
 
     def change_tab(self, index):
         self.current_tab = index
+        if not self.data_handler.entries:
+            return
+        if self.current_tab in [0, 1]:
+            self.main_widget.set_combo_options(["Ammo", "Armor", "Artifacts", "Consumables",
+                                                "Devices", "Tools", "Weapons", "Other"])
+        else:
+            self.main_widget.set_combo_options([])
 
     def fill_window(self, window, name, data_type):  ### TODO: Fix this so that the signal comes from particular gridview, not the entire popup
         if data_type == "prop":
@@ -345,6 +370,9 @@ class App:
         if read == "read":
             self.data_handler.reset()
             self.data_handler.load_all_files(dirpath)
+            if self.current_tab in [0, 1]:
+                self.main_widget.set_combo_options(["Ammo", "Armor", "Artifacts", "Consumables",
+                                "Devices", "Tools", "Weapons", "Other"])
         elif read == "write":
             self.write_all_files(dirpath)
         elif read == "gamedata":

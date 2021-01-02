@@ -64,7 +64,7 @@ def get_item_types(dirpath):
 
 
 def read_file(path, dirpath):
-	entries = {}
+	# entries = {}
 	with open(path, "r", encoding="ISO-8859-1") as infile:
 		file_entry = FileEntry(remove_dirpath(path, dirpath))
 		entry = None
@@ -78,7 +78,7 @@ def read_file(path, dirpath):
 				# Place old entry into the file entry
 				if entry is not None:
 					file_entry.entries_order[counter] = entry
-					entries[entry.name] = entry
+					# entries[entry.name] = entry
 					counter += 1
 				###
 				name = match.group(0).replace("[", "").replace("]", "")
@@ -117,7 +117,7 @@ def read_file(path, dirpath):
 				var = match.group(0)
 				prop_name = prop.split(var)[0].strip()
 				if len(prop.strip().split(var)) > 1:
-					values = prop.strip().split(var)[1].strip()
+					values = ",".join([a.strip() for a in var.join(prop.strip().split(var)[1:]).split(",")])
 			else:
 				prop_name = prop
 				parent = name
@@ -132,30 +132,32 @@ def read_file(path, dirpath):
 			entry_line_no += 1
 		if entry is not None:
 			file_entry.entries_order[counter] = entry
-			entries[entry.name] = entry
-	return file_entry, entries
+			# entries[entry.name] = entry
+	return file_entry  # , entries
 
 
 def read_all_files(dirpath):
 	files = {}
-	all_entries = {}
+	# all_entries = {}
 	for x, y, z in os.walk(os.path.join(dirpath, "configs",  "items")):
 		for f in z:
 			path = os.path.join(x, f)
-			file_entry, entries = read_file(path, dirpath)
+			# file_entry, entries = read_file(path, dirpath)
+			file_entry = read_file(path, dirpath)
 			files[remove_dirpath(path, dirpath)] = file_entry
-			for entry_name, entry in entries.items():
-				all_entries[entry_name] = entry
-	return files, all_entries
+			# for entry_name, entry in entries.items():
+			# 	all_entries[entry_name] = entry
+	return files # , all_entries
 
 
 def read_items(dirpath):
 	path = os.path.join(dirpath, "configs",  "defines.ltx")
 	if not os.path.exists(path):
 		print("Wrong folder!")
-		return None, None
-	file_entry, entries = read_file(path, dirpath)
-	return file_entry, entries
+		return None
+	file_entry = read_file(path, dirpath)
+	# file_entry, entries = read_file(path, dirpath)
+	return file_entry  # , entries
 
 
 def read_available_items(dirpath):

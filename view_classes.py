@@ -381,6 +381,7 @@ class CraftingView(QWidget):
         self.scroll_area.setWidgetResizable(True)
         self.global_layout.addWidget(self.scroll_area)
         self.add_recipe_button = QPushButton("Add recipe")
+        self.add_recipe_button.setEnabled(False)
         self.add_recipe_button.clicked.connect(self.add_recipe)
         self.global_layout.addWidget(self.add_recipe_button)
 
@@ -408,6 +409,7 @@ class CraftingView(QWidget):
     def fill_values(self, crafting_info):
         self.clear()
         self.crafting_info = crafting_info
+        self.add_recipe_button.setEnabled(True)
         ### Make this iterative!
         counter = 1
         for recipe_name, recipe in self.crafting_info["craft"].items():
@@ -470,7 +472,11 @@ class CraftingView(QWidget):
         disassembly_widget.value_change.connect(self.change_disassembling_info)
         disassembly_widget.fill_request.connect(self.send_fill_request)
         self.main_layout.addWidget(disassembly_widget)
-        cond_label = QLabel("Is using item condition")
+        cond_label = QLabel("Is using item condition*")
+        cond_label.setToolTip("Switches the usage of component condition when disassembling. When this is enabled, only"
+                              " one item of each type can be recovered (If you set that it uses e.g. 2 cloth sheets, "
+                              "you will only get 1 during disassembly). If it is disabled, you CAN NOT repair the item "
+                              "at the workbench.")
         cond_button = TrueFalseSwitch()
         cond_button.set_default(self.crafting_info["conditional"])
         cond_button.value_changed.connect(self.switch_conditionality)

@@ -322,6 +322,6 @@ sections = {"Ammo": ['ammo', 'ammo_bad', 'ammo_damaged'],
             "Consumables": ['drugs', 'cigs', 'drinks', "food", "mutant_parts"],
             "Devices": ['devices', 'backpacks'],
             "Tools": ['tools', 'repair_kits', 'upgrade_items', "parts", "toolkits_h"],
-            "Weapons": ['pistols', 'rifles', 'melee', "explosives"],
+            "Weapons": ['pistols', 'rifles', 'melee', "explosives", "w_addons"],
             "Other": ['money', 'camping', 'common_stock', "misc", "unused"]
             }
