@@ -183,6 +183,19 @@ class DataHandler:
         sell_cond = entries["trader"].properties["sell_condition"]
         if "buy_supplies" not in entries["trader"].properties:
             return None
+        discount_line = entries["trader"].properties["discounts"] if\
+            "discounts" in entries["trader"].properties else LineEntry("", 0, "", "discounts", [])
+        discount_entries = {}
+        for entry_name in discount_line.value:
+            if entry_name not in entries:
+                if entry_name not in self.entries:
+                    discount_entries[entry_name] = Entry()  # TODO fill this entry
+                else:
+                    entry = self.entries[entry_name]
+            else:
+                entry = entries[entry_name]
+            discount_entries[entry_name] = entry
+
         trade_entry = {"Trader": trader,
                        "Merch": all_items,
                        "Stocks": {},
@@ -190,8 +203,7 @@ class DataHandler:
                        "Stock_line": entries["trader"].properties["buy_supplies"],
                        "Buy_conditions":  entries[buy_cond.value[0]],
                        "Sell_conditions": entries[sell_cond.value[0]],  # TODO: Add custom buy/sell conditions!!
-                       "discounts": entries["trader"].properties["discounts"] if
-                       "discounts" in entries["trader"].properties else LineEntry("", 0, "", "discounts", []),
+                       "discounts": {"line": discount_line, "entries": discount_entries},
                        "buy_item_condition_factor": entries["trader"].properties["buy_item_condition_factor"] if
                        "buy_item_condition_factor" in entries["trader"].properties else None,
                        "buy_item_exponent": entries["trader"].properties["buy_item_exponent"] if
@@ -419,13 +431,29 @@ class App:
             return
         all_file_entries = {entry.name: entry for index, entry in file_entry.entries_order.items()}
         for supply_name in trade_info["Stock_info"]:
-            if supply_name not in all_file_entries:
+            if not supply_name:
                 continue
-            entry = all_file_entries[supply_name]
-            new_parents = trade_info["Stock_info"][supply_name]["parent"]
-            if new_parents != entry.parents:
-                entry.parents = new_parents
-                entry.changed = True
+            update_list = False
+            if supply_name not in all_file_entries:  # TODO add creating new supplies here
+                new_supply_entry = Entry()
+                new_supply_entry.load_data(supply_name, trade_info["Stock_info"][supply_name]["parent"],
+                                           file_entry.path, 0)
+                new_supply_entry.changed = True
+                last_entry = max(list(file_entry.entries_order.keys()))
+                file_entry.entries_order[last_entry + 1] = new_supply_entry
+                all_file_entries = {entry.name: entry for index, entry in file_entry.entries_order.items()}
+                update_list = True
+                trade_info["Stock_line"].value.append(supply_name)
+                trade_info["Stock_line"].conditions.append("")
+                # continue
+            else:
+                entry = all_file_entries[supply_name]
+                new_parents = trade_info["Stock_info"][supply_name]["parent"]
+                if new_parents != entry.parents:
+                    entry.parents = new_parents
+                    entry.changed = True
+                    update_list = True
+            if update_list:
                 self.data_handler.update_trader(self.current_trader)
                 trade_data = self.data_handler.traders[self.current_trader]
                 self.main_widget.trade_view.set_data(trade_data)
@@ -593,6 +621,6 @@ class App:
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app_class = App()
-    # app_class.read_files("E:/Stalker_modding/unpacked", "read")
+    app_class.read_files("E:/Stalker_modding/unpacked", "read")
     sys.exit(app.exec_())
 

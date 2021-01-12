@@ -2,6 +2,7 @@ import os
 
 credit_line = ";Created using Anomaly config editor. For more info visit www.moddb.com/mods/stalker-anomaly/addons/config-editor/"
 
+
 class FileEntry:
 
     def __init__(self, path):
@@ -44,6 +45,7 @@ class LineEntry:
         self.level = 0
         self.equal_sign = True
         self.conditions = conditions
+        self.changed = False
 
     def __repr__(self):
         return "{}: {}".format(self.prop, ",".join(self.value))
@@ -68,8 +70,11 @@ class LineEntry:
         return line
 
     def is_changed(self):
+        if self.changed:
+            return True
         if self.value != self.default:
             return True
+        return False
 
 
 class Entry:
@@ -258,7 +263,7 @@ class Entry:
         if self.changed:
             return True
         for name, prop in self.properties.items():
-            if prop.value != prop.default or prop.lineno < 0:
+            if prop.value != prop.default or prop.lineno < 0 or prop.changed:
                 return True
         return False
 

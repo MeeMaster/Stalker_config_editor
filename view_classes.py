@@ -796,12 +796,12 @@ class TradeView(QWidget):
         self.supply_widget.setLayout(self.supply_layout)
         self.main_layout.addWidget(self.buy_condition)
         self.main_layout.addWidget(self.sell_condition)
-        # self.discounts = DiscountViewWidget()
-        # self.supplies = SupplyViewWidget()
+        self.discounts = DiscountViewWidget()
+        self.supplies = SupplyViewWidget()
         self.main_layout.addWidget(self.buy_price)
         self.main_layout.addWidget(self.sell_price)
-        # self.main_layout.addWidget(self.discounts)
-        # self.main_layout.addWidget(self.supplies)
+        self.main_layout.addWidget(self.discounts)
+        self.main_layout.addWidget(self.supplies)
         self.main_layout.addWidget(self.supply_widget)
         self.main_widget.setLayout(self.main_layout)
         self.list_view = None
@@ -836,21 +836,10 @@ class TradeView(QWidget):
             self.sell_price.value_changed.connect(self.change_entry)
 
         # self.discounts.clear()
-        for discount_index, discount_value in enumerate(self.trade_dict["discounts"].value):
-            discount_view = DiscountView()
-            discount_view.data_changed.connect(self.change_entry)
-            discount_view.set_data(self.trade_dict["discounts"], discount_index)
-            self.supply_layout.addWidget(discount_view)
-            # self.discounts.add(discount_view)
-
-        # self.supplies.clear()
-        for supply_index in self.trade_dict["Stocks"]:
-            supply_view = SupplyView()
-            supply_view.data_changed.connect(self.change_entry)
-            supply_view.set_data(self.trade_dict["Stock_info"], supply_index)
-            self.supply_layout.addWidget(supply_view)
-            # self.supplies.add(supply_view)
-
+        self.discounts.set_data(self.trade_dict["discounts"])
+        self.discounts.data_changed.connect(self.change_entry)
+        self.supplies.set_data(self.trade_dict["Stock_info"])
+        self.supplies.data_changed.connect(self.change_entry)
         self.list_view = TradingListView()
         self.list_view.data_changed.connect(self.change_entry)
         self.list_view.set_entry(self.trade_dict)
@@ -877,10 +866,11 @@ class DiscountViewWidget(QWidget):
     data_changed = pyqtSignal()
 
     def __init__(self):
+        QWidget.__init__(self)
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
         self.button_layout = QHBoxLayout()
-        self.add_button = QPushButton()
+        self.add_button = QPushButton("Add discount")
         self.button_layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
         self.button_layout.addWidget(self.add_button)
         self.add_button.clicked.connect(self.add_discount)
@@ -893,19 +883,20 @@ class DiscountViewWidget(QWidget):
         if self.trade_data is None:
             return
         new_widget = DiscountView()
-        new_widget.set_data(self.trade_data[index])
-        new_widget.data_changed.connect(self.emit_change())
+        new_widget.set_data(self.trade_data, index)
+        new_widget.data_changed.connect(self.emit_change)
         self.main_layout.insertWidget(index, new_widget)
 
     def set_data(self, data):
+        self.clear()
         self.trade_data = data
-        for discount_index, discount_value in enumerate(self.trade_data.value):
+        for discount_index, discount_value in enumerate(self.trade_data["line"].value):
             self.add_widget(discount_index)
             self.current_index = discount_index
 
     def add_discount(self):
-        # nums = []
-        # for name in self.trade_data.value:
+        # nums = [0]
+        # for name in self.trade_data:
         #     if "supplies_" not in name:
         #         continue
         #     num = name.replace("supplies_", "")
@@ -914,11 +905,12 @@ class DiscountViewWidget(QWidget):
         #     except:
         #         continue
         #     nums.append(int(num))
-        # last_num = max(nums)
-        # new_name = "supplies_{}".format(last_num)
-        self.trade_data.conditions.append("")
-        self.trade_data.value.append("")
+        self.trade_data["line"].conditions.append("")
+        self.trade_data["line"].value.append("")
+        # self.trade_data["entries"]
         self.add_widget(self.current_index + 1)
+        self.current_index += 1
+        self.trade_data["line"].changed = True
         self.emit_change()
 
     def clear(self):
@@ -932,6 +924,66 @@ class DiscountViewWidget(QWidget):
         self.data_changed.emit()
 
 
+class SupplyViewWidget(QWidget):
+    data_changed = pyqtSignal()
+
+    def __init__(self):
+        QWidget.__init__(self)
+        self.main_layout = QVBoxLayout()
+        self.setLayout(self.main_layout)
+        self.button_layout = QHBoxLayout()
+        self.add_button = QPushButton("Add supply")
+        self.button_layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        self.button_layout.addWidget(self.add_button)
+        self.add_button.clicked.connect(self.add_supply)
+        self.main_layout.addLayout(self.button_layout)
+
+        self.current_index = 0
+        self.trade_data = None
+
+    def add_widget(self, index, supply_name):
+        if self.trade_data is None:
+            return
+        new_widget = SupplyView()
+        new_widget.set_data(self.trade_data, supply_name)
+        new_widget.data_changed.connect(self.emit_change)
+        self.main_layout.insertWidget(index, new_widget)
+
+    def set_data(self, data):
+        self.clear()
+        self.trade_data = data
+        for supply_index, supply_name in enumerate(sorted(self.trade_data.keys())):
+            self.add_widget(supply_index, supply_name)
+            self.current_index = supply_index
+
+    def add_supply(self):
+        nums = [0]
+        for name in self.trade_data:
+            if "supplies_" not in name:
+                continue
+            num = name.replace("supplies_", "")
+            try:
+                int(num)
+            except:
+                continue
+            nums.append(int(num))
+        last_num = max(nums)
+        new_name = "supplies_{}".format(last_num+1)
+        self.trade_data[new_name] = {"condition": "", "parent": ""}
+        self.add_widget(self.current_index + 1, new_name)
+        self.current_index += 1
+        self.emit_change()
+
+    def clear(self):
+        self.current_index = 0
+        for i in reversed(range(self.main_layout.count())):
+            item = self.main_layout.itemAt(i)
+            if item.widget() is None:
+                continue
+            item.widget().setParent(None)
+
+    def emit_change(self):
+        self.data_changed.emit()
 
 
 class TradingSelectionGridView(CraftingSelectionGridView):
@@ -1248,29 +1300,49 @@ class DiscountView(QWidget):
     def __init__(self):
         QWidget.__init__(self)
         self.main_layout = QVBoxLayout()
+        self.secondary_layout = QHBoxLayout()
+        self.values_layout = QVBoxLayout()
+        self.props_layout = QVBoxLayout()
+        self.secondary_layout.addLayout(self.values_layout)
+        self.secondary_layout.addLayout(self.props_layout)
         self.name_label = QLabel()
+        self.name_label.setAlignment(Qt.AlignCenter)
         self.name_label.setStyleSheet("font: bold 16px;")
         self.name_label.setAlignment(Qt.AlignCenter)
         self.conditions = SimpleView()
         self.conditions.value_changed.connect(self.change_data)
         self.parents = SimpleView()
         self.parents.value_changed.connect(self.change_parent_data)
+        # self.buy_discount = SimpleView()
+        # self.buy_discount.value_changed.connect(self.change_buy_data)
+        # self.buy_discount.value.setFixedWidth(100)
+        # self.sell_discount = SimpleView()
+        # self.sell_discount.value_changed.connect(self.change_sell_data)
+        # self.sell_discount.value.setFixedWidth(100)
         self.main_layout.addWidget(self.name_label)
-        self.main_layout.addWidget(self.parents)
-        self.main_layout.addWidget(self.conditions)
+        # self.values_layout.addWidget(self.buy_discount)
+        # self.values_layout.addWidget(self.sell_discount)
+        self.props_layout.addWidget(self.parents)
+        self.props_layout.addWidget(self.conditions)
+        self.main_layout.addLayout(self.secondary_layout)
         self.setLayout(self.main_layout)
 
-        self.line_entry = None
+        self.trade_data = None
         self.index = None
 
-    def set_data(self, line_entry, index):
-        self.line_entry = line_entry
+    def set_data(self, trade_data, index):
+        self.trade_data = trade_data
         self.index = index
         self.name_label.setText("Discount " + str(self.index + 1))
-        mock_line = LineEntry("", 0, "", "Name", [self.line_entry.value[self.index]], "")
+        mock_line = LineEntry("", 0, "", "Name", [self.trade_data["line"].value[self.index]], "")
         self.parents.fill_from_input_line(mock_line)
-        mock_line = LineEntry("", 0, "", "Conditions", [self.line_entry.conditions[self.index]], "")
+        mock_line = LineEntry("", 0, "", "Conditions", [self.trade_data["line"].conditions[self.index]], "")
         self.conditions.fill_from_input_line(mock_line)
+        # entry = self.trade_data["entries"][self.trade_data["line"].value[self.index]]
+        # mock_line = LineEntry("", 0, "", "Buy discount", entry.properties["buy"].value, "")
+        # self.buy_discount.fill_from_input_line(mock_line)
+        # mock_line = LineEntry("", 0, "", "Sell discount", entry.properties["sell"].value, "")
+        # self.sell_discount.fill_from_input_line(mock_line)
 
     def change_data(self):
         self.line_entry.conditions[self.index] = self.conditions.value.text()
@@ -1279,3 +1351,9 @@ class DiscountView(QWidget):
     def change_parent_data(self):
         self.line_entry.value[self.index] = self.parents.value.text()
         self.data_changed.emit()
+
+    def change_buy_data(self):
+        pass
+
+    def change_sell_data(self):
+        pass
