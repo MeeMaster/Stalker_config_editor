@@ -7,12 +7,14 @@ from file_reader import split_all
 
 icons = None
 status_icons = None
+all_item_icons = {}
 
 
-def load_equipment_icons():
+def load_equipment_icons(filepath=""):
     global icons
-    final_path = path.join("pics", "ui_icon_equipment.png")
-    icons = QPixmap(final_path)
+    if not filepath:
+        filepath = path.join("pics", "ui_icon_equipment.png")
+    icons = QPixmap(filepath)
 
 
 def load_status_icons():
@@ -28,6 +30,7 @@ def load_all_icons():
 
 def get_icon_data(item_entry):
     start_x, start_y, size_x, size_y = None, None, None, None
+    # print(item_entry.name, item_entry.properties.keys())
     for name in item_entry.properties:
         if name == "inv_grid_x":
             start_x = int(item_entry.properties[name].value[0])
@@ -42,11 +45,16 @@ def get_icon_data(item_entry):
 
 def load_icon_from_entry(entry):
     data = get_icon_data(entry)
+    # print(data)
     for a in data:
         if a is None:
             return None
     icon = load_icon(*data)
     return icon
+
+
+def load_icon_to_cache(entry):
+    all_item_icons[entry.name] = load_icon_from_entry(entry)
 
 
 def load_hud_icon(name):

@@ -1,5 +1,6 @@
 import os
 
+credit_line = ";Created using Anomaly config editor. For more info visit www.moddb.com/mods/stalker-anomaly/addons/config-editor/"
 
 class FileEntry:
 
@@ -22,6 +23,8 @@ class FileEntry:
             if not os.path.exists(os.path.join(*subfolders[:index+1])):
                 os.mkdir(os.path.join(*subfolders[:index+1]))
         with open(path, "w", encoding="ISO-8859-1") as outfile:
+            if not self.header or self.header[0] != credit_line:
+                self.header.insert(0, credit_line)
             outfile.write("\n".join(self.header))
             for order, entry in sorted(self.entries_order.items(), key=lambda x: x[0]):
                 outfile.write("\n\n")
@@ -29,7 +32,7 @@ class FileEntry:
 
 
 class LineEntry:
-    def __init__(self, file, lineno, name, prop, value, comment):
+    def __init__(self, file, lineno, name, prop, value, conditions=[], comment=""):
         self.file = file.strip()
         self.lineno = lineno
         self.name = name.strip()
@@ -39,6 +42,8 @@ class LineEntry:
         self.default = value
         self.comment = comment.strip()
         self.level = 0
+        self.equal_sign = True
+        self.conditions = conditions
 
     def __repr__(self):
         return "{}: {}".format(self.prop, ",".join(self.value))
@@ -48,13 +53,18 @@ class LineEntry:
 
     def copy(self):
         new_entry = LineEntry(str(self.file), int(self.lineno), str(self.name), str(self.prop),
-                              list(self.value), str(self.comment))
+                              list(self.value), list(self.conditions), str(self.comment))
         new_entry.default = list(self.default)
         return new_entry
 
     def write(self):
-        line = "\t\t{}{}= {}\t{}".format(self.prop, "\t" * (10 - (len(self.prop) // 4)),
-                                         ",".join(self.value), self.comment)
+        print(self.value, len(self.value), self.conditions)
+        line = "\t\t{}{}{} {}\t{}".format(self.prop,
+                                          "\t" * (10 - (len(self.prop) // 4)),
+                                          "=" if self.equal_sign else "",
+                                          ",".join([" ".join([self.conditions[index], self.value[index]])
+                                                    for index in range(len(self.value))]) if self.value else "",
+                                          (";" if self.comment else "") + self.comment)
         return line
 
     def is_changed(self):
@@ -75,6 +85,12 @@ class Entry:
         self.comment_lines = {}
         self.changed = False
         self.category = None
+        self.is_item = False
+
+    def reset_parents(self):
+        for prop_name, prop in list(self.properties.items()):
+            if prop.name != self.name:
+                del self.properties[prop_name]
 
     def load_data(self, name, parents, filename, start_line):
         self.name = name
@@ -95,11 +111,6 @@ class Entry:
         self.category = entry.category
 
     def __repr__(self):
-        # lines = []
-        # for line_entry in self.properties:
-        # 	lines.append(self.properties[line_entry].__repr__())
-        #
-        # response = "{}\n{}".format(self.name, "\n".join(lines))
         return "Entry: {}".format(self.name)  # response
 
     def set_parents(self, parents):
@@ -122,6 +133,10 @@ class Entry:
 
     def set_category(self, category):
         self.category = category
+        self.is_item = True
+
+    def determine_category(self):
+        self.category = self.get_item_type()
 
     def has_property(self, prop):
         return prop in self.properties
@@ -137,7 +152,7 @@ class Entry:
 
     def is_armor(self):
         for entry in self.properties:
-            if self.properties[entry].name == "outfit_actions":
+            if self.properties[entry].name == "outfit_actions" or self.properties[entry].name == "outfit_base":
                 return True
         return False
 
@@ -188,10 +203,12 @@ class Entry:
             return "armor"
         if self.is_food():
             return "food"
-        if self.is_weapon():
-            return "weapon"
         if self.is_ammo():
             return "ammo"
+        if self.is_weapon():
+            return "weapon"
+        if self.is_device():
+            return "device"
         return "base"
 
     def has_parent(self, parent):
@@ -248,6 +265,10 @@ class Entry:
     def todict(self):
         return {self.name: self}
 
+    def from_entry(self, entry):
+        self.load_from_entry(entry)
+        return self
+
 
 class CraftingEntry(Entry):
 
@@ -256,12 +277,12 @@ class CraftingEntry(Entry):
         self.quantity = 0
         self.fixed_quantity = False
 
-    def set_entry(self, entry):
+    def from_entry(self, entry):
         self.load_from_entry(entry)
         self.quantity = 1
-        self.name = entry.name
 
     def add(self, value=1):
+        print(value)
         if self.fixed_quantity:
             return
         self.quantity += value
@@ -272,3 +293,30 @@ class CraftingEntry(Entry):
         self.quantity -= value
         if self.quantity < 0:
             self.quantity = 0
+
+
+class TradeEntry(CraftingEntry):
+
+    def __init__(self):
+        CraftingEntry.__init__(self)
+        self.chance = {}
+        self.quantity = {}
+        self.buy_price = 1. #[1., 1.]
+        self.sell_price = 1. #[1., 1.]
+
+    def set_chance(self, supply, chance: float):
+        self.chance[supply] = chance
+
+    def from_entry(self, entry):
+        self.load_from_entry(entry)
+        self.quantity = {}
+        return self
+
+    def set_buy_price(self, price1: float):
+        self.buy_price = price1
+        # self.buy_price[1] = price2
+
+    def set_sell_price(self, price1: float):
+        self.sell_price = price1
+        # self.sell_price[1] = price2
+

@@ -65,7 +65,7 @@ simple_categories = {"inv_weight": "Weight",
                      "repair_min_condition": "Minimum repair condition",
                      "repair_add_condition": "Repair value",
                      "repair_part_bonus": "Bonus repair points",
-                     "use_condition": "Condition degradation",
+                     # "use_condition": "Condition degradation",
                      "degradation_factor": "Condition degradation per use",
                      "disassemble_tool": "Can be used as disassemble tool",
                      "tier": "Item tier",
@@ -90,8 +90,9 @@ simple_categories = {"inv_weight": "Weight",
                      "boost_chemburn_protection": "Toxicity protection",
                      "k_disp": "Ammo dispersion factor",
                      "k_hit": "Hit damage modification factor",
-                     "k_impulse": "Stagger impulse",
+                     "k_impulse": "Stagger impulse factor",
                      "k_ap": "Armor penetration factor",
+                     # "k_disp": "Bullet spread",
                      "impair": "Weapon wear factor",
                      "sprint_allowed": "Sprint allowed",
                      "helmet_avaliable": "Allows to wear helmet",
@@ -104,7 +105,13 @@ simple_categories = {"inv_weight": "Weight",
                      "can_trade": "Can be traded",
                      "default_to_ruck": "Move to backpack after picking up",
                      "ammo_class": "Type of ammo used",
-                     "silencer_name": "Matching silencer"
+                     # "silencer_name": "Matching silencer",
+                     "bullet_hit_power_k": "Hit damage modification factor",
+                     "bullet_hit_impulse_k": "Stagger impulse factor",
+                     "bullet_speed_k": "Bullet speed factor",
+                     "fire_dispersion_base_k": "Fire spread factor (more is worse)",
+                     "buy_item_exponent": "Price modifier for trader selling",
+                     "sell_item_exponent": "Price modifier for trader buying"
                      }
 
 
@@ -320,8 +327,18 @@ sections = {"Ammo": ['ammo', 'ammo_bad', 'ammo_damaged'],
             "Armor": ['headgear', 'outfits', 'outfits_ecolog'],
             "Artifacts": ['artefacts', 'mutant_parts', 'artefacts_h'],
             "Consumables": ['drugs', 'cigs', 'drinks', "food", "mutant_parts"],
-            "Devices": ['devices', 'backpacks'],
+            "Devices": ['devices', 'backpacks', "cooking_stuff"],
             "Tools": ['tools', 'repair_kits', 'upgrade_items', "parts", "toolkits_h"],
             "Weapons": ['pistols', 'rifles', 'melee', "explosives", "w_addons"],
-            "Other": ['money', 'camping', 'common_stock', "misc", "unused"]
+            "Other": ['money', 'camping', 'common_stock', "misc", "unused", "trash", "fuels"]
             }
+
+basic_sections = {"Ammo": ['ammo'],
+                  "Armor": ['armor'],
+                  "Artifacts": ['artifact'],
+                  "Consumables": ["food"],
+                  "Devices": ['device'],
+                  "Tools": ['repair'],
+                  "Weapons": ["weapon"],
+                  "Other": ["base"]
+                  }

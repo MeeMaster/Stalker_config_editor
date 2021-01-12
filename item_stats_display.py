@@ -33,7 +33,7 @@ class ItemStatsDisplay(QWidget):
         icon = load_icon_from_entry(entry)
         if icon is not None:
             self.icon.setPixmap(icon)
-        name = translated_names[entry.name]
+        name = translated_names[entry.name] if entry.name in translated_names else entry.name
         self.name.setText(name)
         self.stats.load_data(entry)
 

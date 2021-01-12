@@ -17,6 +17,7 @@ class MainWindow(QMainWindow):
     directory_signal = pyqtSignal(str, str)
     view_switch_signal = pyqtSignal(bool)
     save_data = pyqtSignal(bool)
+    icon_signal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -39,6 +40,7 @@ class MainWindow(QMainWindow):
         view.triggered[QAction].connect(self.process_trigger)
         file.addAction("Open")
         file.addAction("Read gamedata")
+        file.addAction("Load icons")
         save = QAction("Save", self)
         save.setShortcut("Ctrl+S")
         file.addAction(save)
@@ -56,12 +58,21 @@ class MainWindow(QMainWindow):
         file_dialog.setFileMode(QFileDialog.DirectoryOnly)
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        dirpath = file_dialog.getExistingDirectory(self, title,
-                                                   os.getcwd(), options=options)
+        dirpath = file_dialog.getExistingDirectory(self, title, os.getcwd(), options=options)
         if not dirpath:
             return
-
         self.directory_signal.emit(dirpath, read)
+
+    def open_icon_dialog(self, title):
+        file_dialog = QFileDialog()
+        file_dialog.setFileMode(QFileDialog.ExistingFile)
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        filename = file_dialog.getOpenFileName(self, title, os.getcwd(),
+                                               "Images (*.png *.xpm *.jpg)",  options=options)[0]
+        if not filename:
+            return
+        self.icon_signal.emit(filename)
 
     def process_trigger(self, q):
         if q.text() == "Open":
@@ -74,15 +85,19 @@ class MainWindow(QMainWindow):
             self.open_file_name_dialog("write", "Select write destination")
         if q.text() == "Read gamedata":
             self.open_file_name_dialog("gamedata", "Select gamedata directory")
+        if q.text() == "Load icons":
+            self.open_icon_dialog("Select new icon .png file")
 
 
 class MyWindowWidget(QWidget):
     item_signal = pyqtSignal(str)
     section_signal = pyqtSignal(str)
     value_changed = pyqtSignal(str, str)
+    value_changed = pyqtSignal()
     fill_request = pyqtSignal(object, list, str)
     tab_change = pyqtSignal(int)
     craft_update = pyqtSignal(dict)
+    trade_update = pyqtSignal(dict)
 
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
@@ -116,15 +131,11 @@ class MyWindowWidget(QWidget):
         # Add tabs
         self.tabs = QTabWidget()
         self.tabs.currentChanged.connect(self.emit_tab_change)
-        self.item_tab = QWidget()
-        self.crafting_tab = QWidget()
-        # self.trader_tab = QWidget()
-        self.tabs.addTab(self.item_tab, "Item parameters")
-        self.tabs.addTab(self.crafting_tab, "Crafting")
-        # self.tabs.addTab(self.trader_tab, "Trade")
         self.values_layout.addWidget(self.tabs)
 
         # Item tab layout
+        self.item_tab = QWidget()
+        self.tabs.addTab(self.item_tab, "Item parameters")
         self.values_scroll_layout = QVBoxLayout()
         self.value_scroll_widget = QScrollArea()
         self.value_scroll_widget.setWidgetResizable(True)
@@ -132,6 +143,9 @@ class MyWindowWidget(QWidget):
         self.item_tab.setLayout(self.values_scroll_layout)
 
         # Crafting tab layout
+        self.crafting_tab = QWidget()
+        self.tabs.addTab(self.crafting_tab, "Crafting")
+        self.tabs.setTabEnabled(1, False)
         self.craft_tab_layout = QVBoxLayout()
         self.craft_view = CraftingView()
         self.craft_view.fill_request.connect(self.send_fill_request)
@@ -139,15 +153,32 @@ class MyWindowWidget(QWidget):
         self.craft_tab_layout.addWidget(self.craft_view)
         self.crafting_tab.setLayout(self.craft_tab_layout)
 
+        # Trade tab layout
+        self.trader_tab = QWidget()
+        self.tabs.addTab(self.trader_tab, "Trade")
+        self.trade_tab_layout = QVBoxLayout()
+        self.trade_view = TradeView()
+        self.trade_view.data_changed.connect(self.update_trade)
+        self.trade_view.fill_request.connect(self.send_fill_request)
+        self.trade_tab_layout.addWidget(self.trade_view)
+        self.trader_tab.setLayout(self.trade_tab_layout)
+
         # Add icon display
         self.icon_widget = ItemStatsDisplay()
         self.images_layout.addWidget(self.icon_widget)
 
         self.update_layout()
 
+    def disable_list(self, value):
+        self.item_scroll_widget.setEnabled(not value)
+
     def set_combo_options(self, items):
         self.sections.clear()
         self.sections.addItems(items)
+
+    def update_trade(self, trade_info):
+        self.trade_update.emit(trade_info)
+        pass
 
     def update_crafting(self, crafting_info):
         self.craft_update.emit(crafting_info)
@@ -162,9 +193,6 @@ class MyWindowWidget(QWidget):
 
     def emit_tab_change(self, index):
         self.tab_change.emit(index)
-
-    # def display_icon(self, icon):
-    #     self.icon_widget.setPixmap(icon)
 
     def display_value_data(self, entry):
         if entry is None:
@@ -181,7 +209,7 @@ class MyWindowWidget(QWidget):
         item_list_widget_layout = QVBoxLayout()
         item_list_widget = QWidget()
         main_widget = EditableGridView()
-        main_widget.value_changed.connect(lambda x, y: self.value_changed.emit(x, y))
+        main_widget.value_changed.connect(self.change_value)
         item_list_widget_layout.addWidget(main_widget)
         base_entries = [line_entry for line_name, line_entry in entry.properties.items()
                         if line_entry.name == entry.name]
@@ -246,7 +274,7 @@ class MyWindowWidget(QWidget):
                 widget = SimpleView("switch")
             else:
                 widget = SimpleView()
-            widget.value_changed.connect(lambda x, y: self.value_changed.emit(x, y))
+            widget.value_changed.connect(self.change_value)
             item_list_widget_layout.addWidget(widget)
             widget.fill_from_input_line(line_entry, entry.get_item_type())
         item_list_widget_layout.addStretch()
@@ -256,8 +284,9 @@ class MyWindowWidget(QWidget):
     def send_fill_request(self, function, name, is_type):
         self.fill_request.emit(function, name, is_type)
 
-    def change_value(self, name, value):
-        self.value_changed.emit(name, value)
+    def change_value(self):
+        # self.value_changed.emit(name, value)
+        self.value_changed.emit()
 
     def display_item_list(self, item_dict):
         widget = self.get_list_widget_from_dict(item_dict)
@@ -274,6 +303,8 @@ class MyWindowWidget(QWidget):
             item_list_widget_layout.addWidget(box)
             lay = QVBoxLayout()
             for name, tag in sorted(data_dict[key]):
+                if name is None:
+                    name = tag
                 label = QLabelClickable("{}".format(name))
                 label.native_name = tag
                 label.setAlignment(Qt.AlignCenter)

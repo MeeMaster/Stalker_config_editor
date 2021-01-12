@@ -7,6 +7,10 @@ start_pattern = "<!-{2}"
 wrong_start_pattern = "<!-{3,}"
 end_pattern = "-{2}>"
 wrong_end_pattern = "-{3,}>"
+xml_start_pattern = re.compile("<[^/^<^>]*>")
+xml_end_pattern = re.compile("</[^>^<]*>")
+whitespace = re.compile("^[\s]*")
+# endspace = re.compile("[\s]*")
 
 translated_names = {}
 translated_descriptions = {}
@@ -32,14 +36,20 @@ def clean_line_and_check_comment_token(line: str):
     return line, opening, closing
 
 
-def fix_xml_file(infile):
+def fix_xml_file(infile, print_=False):
     text = infile.readlines()
     fixed_text = []
     last_line = ""
     is_open = False
-    for line in text:
+    for index, line in enumerate(text):
+        line = line.replace("\n", "")
+        # if print_:
+        #     print(line)
         line, opening, closing = clean_line_and_check_comment_token(line)
-        if opening:    
+        # if print_:
+        #     print(line)
+        # line = clear_bad_formatting(line)
+        if opening:
             if is_open:
                 last_line = last_line.replace("\n", "-->\n")
             is_open = True
@@ -50,21 +60,51 @@ def fix_xml_file(infile):
                 line = line.replace(string, string.replace("-", "_"))
         if closing:
             is_open = False
-        fixed_text.append(last_line)    
+        fixed_text.append(last_line)
         last_line = line
     fixed_text.append(last_line)
-    return "".join(fixed_text)
+    # print(fixed_text)
+    for index, item in reversed(list(enumerate(fixed_text))):
+        if not item:
+            fixed_text.pop(index)
+    return "\n".join(fixed_text)
+
+
+def clear_bad_formatting(line):
+    new_line = str(line)
+    start_line = ""
+    whites = ""
+    w_spaces = re.search(whitespace, new_line)
+    if w_spaces is not None:
+        whites = w_spaces.group(0)
+        new_line = new_line.replace(whites, "")
+    match = re.findall(xml_start_pattern, new_line)
+    for start_ in match:
+        start_line += start_
+        new_line = new_line.replace(start_, "")
+    end_line = ""
+    match = re.findall(xml_end_pattern, new_line)
+    for end_ in match:
+        end_line += end_
+        new_line = new_line.replace(end_, "")
+    if start_line or end_line:
+        old_line = str(new_line)
+        new_line = new_line.replace("<", "&lt;").replace(">", "&gt;")
+    line = whites + start_line + new_line + end_line  # + "\n"
+    return line
 
 
 def get_file_paths(dirpath):
     eng = True
     filepaths = []
-    path = os.path.join(dirpath, "configs",  "text", "eng" if eng else "rus")
-    for _, _, z in os.walk(path):
+    # path = os.path.join(dirpath)
+    for x, y, z in os.walk(dirpath):
+        if os.path.join("text", "eng") not in x:
+            continue
         for filename in z:
             if filename.startswith("_"):
                 continue
-            filepath = os.path.join(path, filename)
+            filepath = os.path.join(os.path.join(x, filename))
             filepaths.append(filepath)
     return filepaths
 
@@ -101,16 +141,21 @@ def get_descriptions_from_file(filepath):
     descriptions = {}
     names = {}
     with open(filepath, "r", encoding="ISO-8859-1") as infile:
-        fixed_text = fix_xml_file(infile)
+        print_ = False
+        if "st_quests_agroprom.xml" in filepath:
+            print_ = True
+        fixed_text = fix_xml_file(infile, print_)
     # with open("test", "w", encoding="ISO-8859-1") as outfile:
     #     outfile.write("".join(fixed_text))
 
     try:
         root = ET.fromstring(fixed_text)
     except ET.ParseError as e:
-        if e.code == 3:
-            return names, descriptions
-        raise ET.ParseError(e)
+        # if e.code == 3:
+        return names, descriptions
+        # print(filepath)
+        # continue
+        # raise ET.ParseError(e)
 
     for child in root:
         _id = child.attrib["id"]

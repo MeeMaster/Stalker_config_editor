@@ -1,40 +1,124 @@
 from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QGridLayout, QLineEdit, QHBoxLayout, QPushButton, \
-    QSpacerItem, QSizePolicy, QSlider, QMenu, QAction, QComboBox
-
-from constants import simple_categories, artifact_simple_names, artifact_units, food_units, selections, sections
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QGridLayout, QLineEdit, QHBoxLayout, QPushButton,\
+    QSpacerItem, QSizePolicy, QSlider, QMenu, QAction, QComboBox, QTableWidget, QCheckBox
+# from PyQt5.QtGui import QDoubleValidator, QIntValidator
+from constants import simple_categories, artifact_simple_names, artifact_units, food_units, selections, \
+    sections, basic_sections
 from description_reader import translated_names
-from images import load_icon_from_entry
 from entry_classes import LineEntry
-
-fill_request = pyqtSignal(object, list, str)
+from item_representations import ItemRepresentation, CraftingItemRepresentation, TradeItemRepresentation
+import configs
 
 
 class EditableGridView(QWidget):
-    value_changed = pyqtSignal(str, str)
+    value_changed = pyqtSignal()
 
     def __init__(self, parent=None, maxwidth=3):
         QWidget.__init__(self, parent)
         self.maxwidth = maxwidth
         self.layout = QGridLayout()
         self.setLayout(self.layout)
+        self.entries = []
 
     def fill_from_list(self, l):
+        self.entries = l
         for index, entry in enumerate(l):
             name = entry.prop
-            # default_value = row["default_values"]
-            default_value = "Default: {}".format(",".join(entry.default))
             current_value = entry.value
             column_index = index % self.maxwidth
             row_index = index // self.maxwidth
-            widget = EditableBox(self)
+            widget = EditableBox()
             widget.value_changed.connect(self.change_value)
-            widget.fill_values(name, default_value, current_value)
+            widget.fill_values(entry)
             self.layout.addWidget(widget, row_index, column_index)
         self.setLayout(self.layout)
 
-    def change_value(self, name, value):
-        self.value_changed.emit(name, value)
+    def change_value(self):
+        self.value_changed.emit()
+        # self.value_changed.emit(name, value)
+
+
+class SimpleView(QWidget):
+    value_changed = pyqtSignal()
+
+    def __init__(self, view_type="text", translation_functions=(None, None)):
+        QWidget.__init__(self)
+        layout = QHBoxLayout()
+        self.setLayout(layout)
+        self.name_box = QLabel()
+        self.view_type = view_type
+        self.line_entry = None
+        self.translation_functions = translation_functions
+
+        self.unit_fill = "{:3.1f}%"
+        self.divider = 10
+
+        layout.addWidget(self.name_box)
+        layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        if self.view_type == "slider":
+            self.value = QSlider(Qt.Horizontal)
+            self.value.valueChanged.connect(self.change_value)
+        elif self.view_type == "text":
+            self.value = QLineEdit()
+            self.value.editingFinished.connect(self.change_value)
+        elif self.view_type == "switch":
+            self.value = TrueFalseSwitch()
+            self.value.value_changed.connect(self.change_value)
+        self.value.setFixedWidth(350)
+        self.default = QLabel()
+        self.default.setMinimumWidth(100)
+        layout.addWidget(self.value)
+        if self.view_type == "slider":
+            self.curr_val = QLabel()
+            self.curr_val.setFixedWidth(70)
+            layout.addWidget(self.curr_val)
+        layout.addWidget(self.default)
+
+    def set_min_max_step(self, minimum, maximum, step):
+        if self.view_type == "slider":
+            self.value.setMinimum(minimum)
+            self.value.setMaximum(maximum)
+            self.value.setSingleStep(step)
+
+    def fill_from_input_line(self, line_entry, item_type=""):
+        self.line_entry = line_entry
+        name = simple_categories[line_entry.prop] if line_entry.prop in simple_categories else line_entry.prop
+        self.name_box.setText(name)
+        if item_type == "artifact":
+            if line_entry.prop in artifact_simple_names:
+                self.name_box.setText(artifact_simple_names[line_entry.prop])
+            if line_entry.prop in artifact_units:
+                self.unit_fill = "{} " + artifact_units[line_entry.prop]
+                self.divider = 1
+        if item_type == "food":
+            if line_entry.prop in food_units:
+                self.unit_fill = "{} " + food_units[line_entry.prop]
+                self.divider = 1
+        if self.view_type == "slider":
+            value = float(line_entry.value[0])
+            if self.translation_functions[0] is not None:
+                value = self.translation_functions[0](value=float(line_entry.value[0]))
+            self.curr_val.setText(self.unit_fill.format(value / self.divider))
+            self.default.setText(self.unit_fill.format(value / self.divider))
+            self.value.setValue(value)
+        elif self.view_type == "text":
+            self.value.setText(",".join(line_entry.value))
+            self.default.setText(",".join(line_entry.value))
+        elif self.view_type == "switch":
+            self.value.set_default(line_entry.value[0])
+            self.default.setText(",".join(line_entry.value))
+
+    def change_value(self, value=None):
+        if self.view_type == "slider":
+            self.curr_val.setText(self.unit_fill.format(value / self.divider))
+            if self.translation_functions[1] is not None:
+                value = self.translation_functions[1](value=value)
+        elif self.view_type == "text":
+            value = self.value.text()
+        value = str(value)
+        self.line_entry.value = [value]
+        self.value_changed.emit()
+        # self.value_changed.emit(self.line_entry.prop, value)
 
 
 class QLabelClickable(QLabel):
@@ -49,10 +133,11 @@ class QLabelClickable(QLabel):
 
 
 class EditableBox(QWidget):
-    value_changed = pyqtSignal(str, str)
+    value_changed = pyqtSignal()
+    # value_changed = pyqtSignal(str, str)
 
-    def __init__(self, parent=None):
-        QWidget.__init__(self, parent)
+    def __init__(self):
+        QWidget.__init__(self)
         # self.resize(150, 50)
         self.layout = QVBoxLayout()
         self.editable_widget = QLineEdit()
@@ -64,18 +149,21 @@ class EditableBox(QWidget):
         self.layout.addWidget(self.editable_widget)
         self.layout.addWidget(self.default_value)
         self.editable_widget.editingFinished.connect(self.change_value)
+        self.entry = None
 
-    def fill_values(self, name, def_value, current_value):
-        self.name_label.setText(name)
-        self.default_value.setText(str(def_value))
-        self.editable_widget.setText(",".join(current_value))
+    def fill_values(self, entry):
+        self.entry = entry
+        self.name_label.setText(entry.prop)
+        self.default_value.setText("Default: {}".format(",".join(entry.default)))
+        self.editable_widget.setText(",".join(entry.value))
         self.setLayout(self.layout)
 
     def get_default_value(self):
         return self.default_value.text()
 
     def change_value(self):
-        self.value_changed.emit(self.name_label.text(), self.editable_widget.text())
+        self.entry.value = [a.strip() for a in self.editable_widget.text().split()]
+        self.value_changed.emit()
 
 
 class ValueLineEdit(QLineEdit):
@@ -177,7 +265,7 @@ class SelectionWindow(QWidget):
 class SelectionGridView(QWidget):
     entry_changed = pyqtSignal(str)
 
-    def __init__(self, label):
+    def __init__(self, label=""):
         QWidget.__init__(self)
         self.main_layout = QVBoxLayout()
         self.label_layout = QHBoxLayout()
@@ -185,11 +273,8 @@ class SelectionGridView(QWidget):
         self.label.setStyleSheet("font: bold 16px;")
         self.label_layout.addWidget(self.label)
 
-        self.name_filter = QLineEdit()
-        self.name_filter.textChanged.connect(self.filter)
-        self.name_filter.setMaximumWidth(150)
-        self.type_filter = ItemTypeSelection()
-        self.type_filter.currentIndexChanged.connect(self.filter)
+        self.filter = FilterWidget()
+        self.filter.filter_changed.connect(self.filter_items)
 
         self.scroll_area = QScrollArea()
         self.grid_layout = QGridLayout()
@@ -197,39 +282,48 @@ class SelectionGridView(QWidget):
         self.main_layout.addWidget(self.scroll_area)
         self.maxwidth = 6
         self.current_list = []
+        self.item_repr = ItemRepresentation
+
+    def set_name(self, name):
+        self.label.setText(name)
 
     def set_item_list(self, l):
         self.current_list = l
-        self.filter()
+        self.filter_items(*self.filter.get_current())
+
+    def set_item_representation_type(self, item_type):
+        self.item_repr = item_type
 
     def add_filter(self):
         self.label_layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        self.label_layout.addWidget(self.name_filter)
-        self.label_layout.addWidget(self.type_filter)
+        self.label_layout.addWidget(self.filter)
 
-    def fill_from_list(self, l):
+    def fill_from_list(self, item_list):
         self.grid_layout = QGridLayout()
-        l = [entry for entry in l if entry.name in translated_names]
-        for index, entry in enumerate(l):
-            column_index = index % self.maxwidth
-            row_index = index // self.maxwidth
-            widget = ItemRepresentation(entry)
-            widget.clicked.connect(self.emit_change)
-
-            widget.load_data(entry)
-            self.grid_layout.addWidget(widget, row_index, column_index)
-
+        item_list = [entry for entry in item_list if entry.name in translated_names]
+        for index, entry in enumerate(item_list):
+            widget = self.add_item_to_grid(index, entry)
+            self.register_signals(widget)
         grid_widget = QWidget()
         grid_widget.setLayout(self.grid_layout)
         self.scroll_area.setWidget(grid_widget)
         self.setLayout(self.main_layout)
 
+    def register_signals(self, widget):
+        widget.clicked.connect(self.emit_change)
+
+    def add_item_to_grid(self, index, entry):
+        column_index = index % self.maxwidth
+        row_index = index // self.maxwidth
+        widget = self.item_repr(entry)
+        widget.load_data(entry)
+        self.grid_layout.addWidget(widget, row_index, column_index)
+        return widget
+
     def emit_change(self, name):
         self.entry_changed.emit(name)
 
-    def filter(self):
-        curr_text = self.name_filter.text()
-        curr_type = self.type_filter.currentText()
+    def filter_items(self, curr_text, curr_type):
         available_items = [entry for entry in self.current_list if entry.name in translated_names]
         if curr_type != "All":
             available_items = [entry for entry in available_items if entry.is_category(curr_type)]
@@ -241,17 +335,20 @@ class SelectionGridView(QWidget):
 class ItemTypeSelection(QComboBox):
     value_changed = pyqtSignal(str)
 
-    def __init__(self):
+    def __init__(self, has_all=True):
         QComboBox.__init__(self)
-        self.items = ["All"]
-        for key, values in sections.items():
-            for value in values:
-                self.items.append(value)
+        self.items = []
+        if has_all:
+            self.items.append("All")
+        if configs.basic_view:
+            for key, values in basic_sections.items():
+                for value in values:
+                    self.items.append(value)
+        else:
+            for key, values in sections.items():
+                for value in values:
+                    self.items.append(value)
         self.addItems(self.items)
-        # self.currentIndexChanged.connect(self.emit_change)
-
-    # def emit_change(self, index):
-    #     self.value_changed.emit(self.items[index])
 
 
 class CraftingSelectionGridView(SelectionGridView):
@@ -260,23 +357,7 @@ class CraftingSelectionGridView(SelectionGridView):
     def __init__(self, label):
         SelectionGridView.__init__(self, label)
         self.single = False
-
-    def fill_from_list(self, l):
-        self.grid_layout = QGridLayout()
-        l = [entry for entry in l if entry.name in translated_names]
-        for index, entry in enumerate(l):
-            column_index = index % self.maxwidth
-            row_index = index // self.maxwidth
-            widget = CraftingItemRepresentation(entry)
-            widget.value_changed.connect(self.emit_change)
-            widget.set_single_item(self.single)
-            widget.load_data(entry)
-            self.grid_layout.addWidget(widget, row_index, column_index)
-
-        grid_widget = QWidget()
-        grid_widget.setLayout(self.grid_layout)
-        self.scroll_area.setWidget(grid_widget)
-        self.setLayout(self.main_layout)
+        self.set_item_representation_type(CraftingItemRepresentation)
 
     def emit_change(self, name, value):
         self.value_changed.emit(name, value)
@@ -284,88 +365,9 @@ class CraftingSelectionGridView(SelectionGridView):
     def set_single_item(self, setting):
         self.single = setting
 
-
-class ItemRepresentation(QWidget):
-    clicked = pyqtSignal(str)
-
-    def __init__(self, entry):
-        QWidget.__init__(self)
-        self.entry = entry
-        self.main_layout = QVBoxLayout()
-        self.image = QLabel()
-        self.image.setFixedWidth(100)
-        self.image.setFixedHeight(100)
-        self.image.setAlignment(Qt.AlignCenter)
-        self.label = QLabel()
-        self.label.setMaximumWidth(70)
-        self.label.setAlignment(Qt.AlignCenter)
-        self.label.setWordWrap(True)
-        self.main_layout.addWidget(self.image)
-        self.main_layout.addWidget(self.label)
-        self.load_data(entry)
-        # self.connect(self.emit_change)
-        self.setLayout(self.main_layout)
-
-    def load_data(self, entry):
-        self.label.setText(translated_names[entry.name])
-        icon = load_icon_from_entry(entry)
-        if icon is None:
-            return
-        self.image.setPixmap(icon)
-
-    def mouseDoubleClickEvent(self, event):
-        self.clicked.emit(self.entry.name)
-
-
-class CraftingItemRepresentation(ItemRepresentation):
-    value_changed = pyqtSignal(str, int)
-
-    def __init__(self, entry):
-        ItemRepresentation.__init__(self, entry)
-        self.counter_layout = QHBoxLayout()
-        self.main_layout.addLayout(self.counter_layout)
-        self.minus_button = QPushButton("-")
-        self.minus_button.setFixedWidth(15)
-        self.plus_button = QPushButton("+")
-        self.plus_button.setFixedWidth(15)
-        self.value_view = QLabel()
-        self.value_view.setAlignment(Qt.AlignCenter)
-        self.value_view.setFixedWidth(15)
-        self.counter_layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        self.counter_layout.addWidget(self.minus_button)
-        self.counter_layout.addWidget(self.value_view)
-        self.counter_layout.addWidget(self.plus_button)
-        self.counter_layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        self.minus_button.clicked.connect(lambda: self.change_value(False))
-        self.plus_button.clicked.connect(lambda: self.change_value(True))
-        self.single = False
-        self.update_view()
-
-    def change_value(self, add=True):
-        if self.single:
-            return
-        if add:
-            self.entry.add()
-        else:
-            self.entry.remove()
-        self.update_view()
-        self.value_changed.emit(self.entry.name, self.entry.quantity)
-
-    def set_single_item(self, setting):
-        self.single = setting
-        self.minus_button.setEnabled(not setting)
-        self.plus_button.setEnabled(not setting)
-
-    def update_view(self):
-        self.value_view.setText(str(self.entry.quantity))
-
-    # def load_data(self, entry):
-    #     self.label.setText(translated_names[entry.name])
-    #     # self.value_view.setText(str(entry.quantity))
-    #     icon = load_icon_from_entry(entry)
-    #     if icon is None:
-    #         return
-    #     self.image.setPixmap(icon)
+    def register_signals(self, widget):
+        widget.clicked.connect(self.emit_change)
+        widget.value_changed.connect(self.emit_change)
 
 
 class CraftingView(QWidget):
@@ -434,7 +436,9 @@ class CraftingView(QWidget):
             wid.layout().addWidget(label)
 
             local_layout = QHBoxLayout()
-            craft_recipe_widget = ComponentDisplay(booklet, "Recipe")
+            craft_recipe_widget = ComponentDisplay("Recipe")
+            craft_recipe_widget.set_selection_grid_type(CraftingSelectionGridView)
+            craft_recipe_widget.set_entries(booklet)
             craft_recipe_widget.set_single_item(True)
             craft_recipe_widget.setMinimumHeight(350)
             craft_recipe_widget.set_part_type("booklets")
@@ -443,7 +447,9 @@ class CraftingView(QWidget):
             craft_recipe_widget.value_change.connect(self.change_recipe)
             craft_recipe_widget.fill_request.connect(self.send_fill_request)
 
-            toolkit_widget = ComponentDisplay(toolkit, "Toolkit")
+            toolkit_widget = ComponentDisplay("Toolkit")
+            toolkit_widget.set_selection_grid_type(CraftingSelectionGridView)
+            toolkit_widget.set_entries(toolkit)
             toolkit_widget.set_single_item(True)
             toolkit_widget.setMinimumHeight(350)
             toolkit_widget.set_part_type("tools")
@@ -453,7 +459,9 @@ class CraftingView(QWidget):
             local_layout.addWidget(toolkit_widget)
             wid.layout().addLayout(local_layout)
 
-            crafting_widget = ComponentDisplay(crafting_info["craft"][recipe_name]["entries"], "Crafting")
+            crafting_widget = ComponentDisplay("Crafting")
+            crafting_widget.set_selection_grid_type(CraftingSelectionGridView)
+            crafting_widget.set_entries(crafting_info["craft"][recipe_name]["entries"])
             crafting_widget.set_single_item(False)
             crafting_widget.set_part_type("all")
             crafting_widget.setMinimumHeight(350)
@@ -465,7 +473,9 @@ class CraftingView(QWidget):
             self.main_layout.addWidget(wid)
             counter += 1
 
-        disassembly_widget = ComponentDisplay(crafting_info["disassemble"], "Disassembling")
+        disassembly_widget = ComponentDisplay("Disassembling")
+        disassembly_widget.set_selection_grid_type(CraftingSelectionGridView)
+        disassembly_widget.set_entries(crafting_info["disassemble"])
         disassembly_widget.set_single_item(False)
         disassembly_widget.setMinimumHeight(350)
         disassembly_widget.set_part_type("all")
@@ -522,6 +532,7 @@ class CraftingView(QWidget):
         self.send_change()
 
     def change_crafting_info(self, name, value):
+        # if change_type == "quantity":
         self.crafting_info["craft"][name]["entries"] = value
         self.send_change()  # Pass recipe name!
 
@@ -541,7 +552,7 @@ class CraftingViewWidget(QWidget):
         self.setLayout(layout)
         self.menu = QMenu(self)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.menu.addAction(QAction("Remove", self))
+        self.menu.addAction(QAction("Remove entire recipe", self))
         self.customContextMenuRequested.connect(self.show_header_menu)
         self.item = None
 
@@ -557,7 +568,7 @@ class CraftingViewWidget(QWidget):
         self.menu_actions[option] = target
 
     def resolve_action(self, action):
-        if action.text() == "Remove":
+        if action.text() == "Remove entire recipe":
             self.remove()
 
     def remove(self):
@@ -568,29 +579,41 @@ class ComponentDisplay(QWidget):
     fill_request = pyqtSignal(object, list, str)
     value_change = pyqtSignal(str, dict)
 
-    def __init__(self, entries, name):
+    def __init__(self, name=""):
         QWidget.__init__(self)
-        if entries is None:
-            return
+        # if entries is None:
+        #     return
         self.popup = None
-        self.selected_entries = entries
+        self.selected_entries = {}#entries
         self.recipe_name = ""
 
         self.main_layout = QVBoxLayout()
-        self.chosen_items = CraftingSelectionGridView(name)
-        self.chosen_items.value_changed.connect(self.update_quantity)
+        self.chosen_items = SelectionGridView(name)
         self.main_layout.addWidget(self.chosen_items)
         self.button_layout = QHBoxLayout()
-
-        self.mock_entry = LineEntry("", 0, "", "Components", list(self.selected_entries.keys()), "")
-
-        self.change_widget = CraftingSelectionWidget(self.mock_entry, None)
+        self.mock_entry = None
+        self.change_widget = CraftingSelectionWidget(None)
         self.change_widget.value_changed.connect(self.change_value)
         self.change_widget.fill_request.connect(self.send_fill_request)
         self.main_layout.addWidget(self.change_widget)
 
         self.update_display()
         self.setLayout(self.main_layout)
+
+    def set_selection_grid_type(self, sel_grd_type):
+        self.chosen_items.setParent(None)
+        self.chosen_items = sel_grd_type(self.chosen_items.label.text())
+        self.main_layout.insertWidget(0, self.chosen_items)
+        self.chosen_items.value_changed.connect(self.update_quantity)
+
+    def set_name(self, name):
+        self.chosen_items.set_name(name)
+
+    def set_entries(self, entries):
+        self.selected_entries = entries
+        self.mock_entry = LineEntry("", 0, "", "Components", list(self.selected_entries.keys()), "")
+        self.change_widget.set_line_entry(self.mock_entry)
+        self.update_display()
 
     def set_single_item(self, setting):
         self.change_widget.set_single_item(setting)
@@ -631,22 +654,21 @@ class ComponentDisplay(QWidget):
         self.value_change.emit(self.recipe_name, self.selected_entries)
 
     def update_display(self):
-        # self.selected_entries = data["available"]
         item_list = [item for name, item in self.selected_entries.items()]
-        self.chosen_items.fill_from_list(item_list)
+        self.chosen_items.set_item_list(item_list)
 
 
 class SelectionWidget(QWidget):
     value_changed = pyqtSignal(str, str)
     fill_request = pyqtSignal(object, list, str)
 
-    def __init__(self, line_entry, selection_type=None):
+    def __init__(self, selection_type=None):
         QWidget.__init__(self)
         layout = QHBoxLayout()
         self.setLayout(layout)
         self.selection_type = selection_type
         self.name_box = QLabel()
-        self.line_entry = line_entry
+        self.line_entry = None
         layout.addWidget(self.name_box)
         layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
         self.button = QPushButton("Open editor")
@@ -668,7 +690,7 @@ class SelectionWidget(QWidget):
         selection = self.selection_type if self.selection_type is not None else self.line_entry.prop
         if selection not in selections:
             return
-        self.fill_request.emit(self.popup, selections[selection], "prop" if self.selection_type is None else "type")  # TODO: FIX THIS SHIT
+        self.fill_request.emit(self.popup, selections[selection], "prop" if self.selection_type is None else "type")
         self.fill_request.emit(self.popup, self.line_entry.value, "name")
         self.popup.ok_button.clicked.connect(self.ok_clicked)
         self.popup.cancel_button.clicked.connect(self.close_popup)
@@ -701,8 +723,8 @@ class SelectionWidget(QWidget):
 class CraftingSelectionWidget(SelectionWidget):
     value_changed = pyqtSignal(dict)
 
-    def __init__(self, line_entry, selection_type=None):
-        SelectionWidget.__init__(self, line_entry, selection_type)
+    def __init__(self, selection_type=None):
+        SelectionWidget.__init__(self, selection_type)
 
     def ok_clicked(self):
         value = self.popup.ok()
@@ -748,82 +770,512 @@ class TrueFalseSwitch(QWidget):
             self.no_button.setChecked(True)
 
 
-class SimpleView(QWidget):
-    value_changed = pyqtSignal(str, str)
+class TradeView(QWidget):
+    fill_request = pyqtSignal(object, list, str)
+    data_changed = pyqtSignal(dict)
 
-    def __init__(self, view_type="text", translation_functions=(None, None)):
+    def __init__(self):
         QWidget.__init__(self)
-        layout = QHBoxLayout()
-        self.setLayout(layout)
-        self.name_box = QLabel()
-        self.view_type = view_type
+
+        self.trade_dict = None
+
+        self.scroll_layout = QVBoxLayout()
+        self.setLayout(self.scroll_layout)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_layout.addWidget(self.scroll_area)
+        self.main_widget = QWidget()
+        self.scroll_area.setWidget(self.main_widget)
+        self.main_layout = QVBoxLayout()
+        self.buy_condition = SimpleView("text")
+        self.sell_condition = SimpleView("text")
+        self.buy_price = SimpleView("text")
+        self.sell_price = SimpleView("text")
+        self.supply_widget = QWidget()
+        self.supply_layout = QVBoxLayout()
+        self.supply_widget.setLayout(self.supply_layout)
+        self.main_layout.addWidget(self.buy_condition)
+        self.main_layout.addWidget(self.sell_condition)
+        # self.discounts = DiscountViewWidget()
+        # self.supplies = SupplyViewWidget()
+        self.main_layout.addWidget(self.buy_price)
+        self.main_layout.addWidget(self.sell_price)
+        # self.main_layout.addWidget(self.discounts)
+        # self.main_layout.addWidget(self.supplies)
+        self.main_layout.addWidget(self.supply_widget)
+        self.main_widget.setLayout(self.main_layout)
+        self.list_view = None
+
+    def clear(self):
+        for i in reversed(range(self.supply_layout.count())):
+            item = self.supply_layout.itemAt(i)
+            if item.widget() is None:
+                continue
+            item.widget().setParent(None)
+
+    def set_data(self, trade_dict):
+        self.trade_dict = trade_dict
+        self.clear()
+        self.buy_condition.fill_from_input_line(LineEntry("", 0, "", "Buy preset inherited from",
+                                                          trade_dict["Buy_conditions"].parents, ""), "")
+        self.buy_condition.value_changed.connect(self.change_buy_parent)
+        self.sell_condition.fill_from_input_line(LineEntry("", 0, "", "Sell preset inherited from",
+                                                           trade_dict["Sell_conditions"].parents, ""), "")
+        self.sell_condition.value_changed.connect(self.change_sell_parent)
+        if trade_dict["buy_item_exponent"] is None:
+            self.buy_price.setEnabled(False)
+        else:
+            self.buy_price.setEnabled(True)
+            self.buy_price.fill_from_input_line(trade_dict["buy_item_exponent"], "")
+            self.buy_price.value_changed.connect(self.change_entry)
+        if trade_dict["sell_item_exponent"] is None:
+            self.sell_price.setEnabled(False)
+        else:
+            self.sell_price.setEnabled(True)
+            self.sell_price.fill_from_input_line(trade_dict["sell_item_exponent"], "")
+            self.sell_price.value_changed.connect(self.change_entry)
+
+        # self.discounts.clear()
+        for discount_index, discount_value in enumerate(self.trade_dict["discounts"].value):
+            discount_view = DiscountView()
+            discount_view.data_changed.connect(self.change_entry)
+            discount_view.set_data(self.trade_dict["discounts"], discount_index)
+            self.supply_layout.addWidget(discount_view)
+            # self.discounts.add(discount_view)
+
+        # self.supplies.clear()
+        for supply_index in self.trade_dict["Stocks"]:
+            supply_view = SupplyView()
+            supply_view.data_changed.connect(self.change_entry)
+            supply_view.set_data(self.trade_dict["Stock_info"], supply_index)
+            self.supply_layout.addWidget(supply_view)
+            # self.supplies.add(supply_view)
+
+        self.list_view = TradingListView()
+        self.list_view.data_changed.connect(self.change_entry)
+        self.list_view.set_entry(self.trade_dict)
+        self.supply_layout.addWidget(self.list_view)
+        self.supply_widget.setLayout(self.supply_layout)
+
+    def change_buy_parent(self):
+        self.trade_dict["Buy_conditions"].parents = [self.buy_condition.value.text()]
+        self.change_entry()
+
+    def change_sell_parent(self):
+        self.trade_dict["Sell_conditions"].parents = [self.sell_condition.value.text()]
+        self.change_entry()
+
+    def send_fill_request(self, function, name, request_type):
+        self.fill_request.emit(function, name, request_type)
+
+    def change_entry(self):
+        self.trade_dict  # This forces the trade dict to update, I have no idea why it doesn't do that automatically
+        self.data_changed.emit(self.trade_dict)
+
+
+class DiscountViewWidget(QWidget):
+    data_changed = pyqtSignal()
+
+    def __init__(self):
+        self.main_layout = QVBoxLayout()
+        self.setLayout(self.main_layout)
+        self.button_layout = QHBoxLayout()
+        self.add_button = QPushButton()
+        self.button_layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        self.button_layout.addWidget(self.add_button)
+        self.add_button.clicked.connect(self.add_discount)
+        self.main_layout.addLayout(self.button_layout)
+
+        self.current_index = 0
+        self.trade_data = None
+
+    def add_widget(self, index):
+        if self.trade_data is None:
+            return
+        new_widget = DiscountView()
+        new_widget.set_data(self.trade_data[index])
+        new_widget.data_changed.connect(self.emit_change())
+        self.main_layout.insertWidget(index, new_widget)
+
+    def set_data(self, data):
+        self.trade_data = data
+        for discount_index, discount_value in enumerate(self.trade_data.value):
+            self.add_widget(discount_index)
+            self.current_index = discount_index
+
+    def add_discount(self):
+        # nums = []
+        # for name in self.trade_data.value:
+        #     if "supplies_" not in name:
+        #         continue
+        #     num = name.replace("supplies_", "")
+        #     try:
+        #         int(num)
+        #     except:
+        #         continue
+        #     nums.append(int(num))
+        # last_num = max(nums)
+        # new_name = "supplies_{}".format(last_num)
+        self.trade_data.conditions.append("")
+        self.trade_data.value.append("")
+        self.add_widget(self.current_index + 1)
+        self.emit_change()
+
+    def clear(self):
+        for i in reversed(range(self.main_layout.count())):
+            item = self.main_layout.itemAt(i)
+            if item.widget() is None:
+                continue
+            item.widget().setParent(None)
+
+    def emit_change(self):
+        self.data_changed.emit()
+
+
+
+
+class TradingSelectionGridView(CraftingSelectionGridView):
+    value_changed = pyqtSignal(str, int)
+    chance_changed = pyqtSignal(str, float)
+
+    def __init__(self, label):
+        SelectionGridView.__init__(self, label)
+        self.set_item_representation_type(TradeItemRepresentation)
+
+    def register_signals(self, widget):
+        widget.clicked.connect(self.emit_change)
+        widget.value_changed.connect(self.emit_change)
+        widget.chance_changed.connect(self.emit_chance_change)
+
+    def emit_chance_change(self, name, value):
+        self.chance_changed.emit(name, value)
+
+
+class TradingListView(QWidget):
+    data_changed = pyqtSignal()
+
+    def __init__(self):
+        QWidget.__init__(self)
+        self.main_layout = QVBoxLayout()
+        self.label_layout = QHBoxLayout()
+        self.entry_name = QLabel("Supplies and prices")
+        self.entry_name.setStyleSheet("font: bold 16px;")
+        self.entry_name.setAlignment(Qt.AlignCenter)
+        self.filter = FilterWidget(False)
+        self.filter.filter_changed.connect(self.filter_data)
+        self.label_layout.addWidget(self.entry_name)
+        self.label_layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        self.label_layout.addWidget(self.filter)
+        self.main_layout.addLayout(self.label_layout)
+        self.table = QTableWidget()
+
+        self.main_layout.addWidget(self.table)
+        self.setLayout(self.main_layout)
+
+        self.name = None
+        self.trade_entry = None
+        self.entry_order = {}
+
+    def set_entry(self, trade_entry):
+        self.trade_entry = trade_entry
+        self.fill_table(self.filter.get_current())
+
+    def fill_table(self, filters):
+        self.table.setColumnCount(3 + len(self.trade_entry["Stocks"]))
+        self.table.setMinimumHeight(500)
+        curr_text, curr_sect = filters
+        self.table.setHorizontalHeaderLabels(["Item", "Buy price factor", "Sell price factor"] +
+                                             list(sorted(self.trade_entry["Stocks"].keys())))
+        good_items = [item for item_name, item in self.trade_entry["Merch"].items() if item.category == curr_sect]
+        if curr_text:
+            good_items = [item for item in good_items if curr_text.lower() in translated_names[item.name].lower()]
+        self.table.setRowCount(len(good_items))
+        for index, item in enumerate(good_items):
+            self.entry_order[item.name] = index
+            self.set_item_at_index(index, item)
+        self.table.resizeColumnsToContents()
+        self.table.resizeRowsToContents()
+
+    def set_item_at_index(self, index, item):
+        representation = ItemRepresentation(item)
+        self.table.setCellWidget(index, 0, representation)
+        buy_price = TablePriceWidget()
+        buy_price.set_data(item, self.trade_entry["Buy_conditions"])
+        buy_price.data_changed.connect(self.change_price)
+        self.table.setCellWidget(index, 1, buy_price)
+        sell_price = TablePriceWidget()
+        sell_price.set_data(item, self.trade_entry["Sell_conditions"])
+        self.table.setCellWidget(index, 2, sell_price)
+        sell_price.data_changed.connect(self.change_price)
+        for index2, supply_name in enumerate(sorted(self.trade_entry["Stocks"].keys())):
+            supply_widget = TableSupplyWidget()
+            supply_widget.data_changed.connect(self.change_data)
+            supply_widget.set_data(item.name, supply_name, self.trade_entry["Stocks"])
+            self.table.setCellWidget(index, 3 + index2, supply_widget)
+
+    def change_data(self, entry):
+        # all_children = self.get_all_children(supply)
+        item = self.trade_entry["Merch"][entry]
+        self.set_item_at_index(self.entry_order[entry], item)
+        self.data_changed.emit()
+
+    def change_price(self):
+        self.data_changed.emit()
+
+    def get_all_children(self, supply_name):
+        current_children = [supply_name]
+        found = True
+        while found:
+            found = False
+            for supply in self.trade_entry["Stocks"]:
+                for parent in self.trade_entry["Stocks"][supply]["parent"]:
+                    if parent not in current_children:
+                        continue
+                    if supply in current_children:
+                        continue
+                    current_children.append(supply)
+                    found = True
+        current_children.remove(supply_name)
+        return current_children
+
+    def filter_data(self, curr_text, curr_selection):
+        self.fill_table((curr_text, curr_selection))
+
+    def clear_table(self):
+        self.entry_order = {}
+        self.table.setRowCount(0)
+
+
+class TablePriceWidget(QWidget):
+    data_changed = pyqtSignal()
+
+    def __init__(self):
+        QWidget.__init__(self)
+        self.main_layout = QVBoxLayout()
+        self.supply_label = QLabel("Price")
+        self.supply_edit = QLineEdit()
+        self.supply_edit.setMaximumWidth(30)
+        self.supply_edit.editingFinished.connect(self.change_data)
+        self.main_layout.addWidget(self.supply_label)
+        self.main_layout.addWidget(self.supply_edit)
+        self.setLayout(self.main_layout)
+        self.item = None
+        self.price_entry = None
+
+    def set_data(self, item, price_entry):
+        self.item = item
+        self.price_entry = price_entry
+        if self.item.name not in price_entry.properties:
+            value = 1
+        else:
+            value = price_entry.properties[self.item.name].value[0]
+        if not value:
+            value = 0
+        self.supply_edit.setText(str(value))
+
+    def change_data(self):
+        new_value = self.supply_edit.text()
+        new_value = ".".join(new_value.split(","))
+        old_value = self.price_entry.properties[self.item.name].value[0] if \
+            self.item.name in self.price_entry.properties else 1
+        if not old_value:
+            old_value = "0"
+        if new_value == old_value:
+            return
+        if self.item.name not in self.price_entry.properties:
+            mock_line = LineEntry(self.price_entry.file, -1, self.price_entry.name, self.item.name, [], "")
+            self.price_entry.properties[self.item.name] = mock_line
+        if new_value == "0":
+            self.price_entry.properties[self.item.name].value = [""]
+            self.price_entry.properties[self.item.name].equal_sign = False
+            self.price_entry.properties[self.item.name].comment = "NO TRADE"
+        else:
+            self.price_entry.properties[self.item.name].value = [new_value, new_value]
+        self.price_entry.changed = True
+        self.data_changed.emit()
+
+
+class TableSupplyWidget(QWidget):
+    data_changed = pyqtSignal(str)
+
+    def __init__(self):
+        QWidget.__init__(self)
+        self.main_layout = QVBoxLayout()
+        self.supply_label = QLabel("Supply")
+        self.supply_edit = QLineEdit()
+        self.supply_edit.setMaximumWidth(30)
+        self.supply_edit.editingFinished.connect(self.change_data)
+        self.chance_label = QLabel("Chance")
+        self.chance_edit = QLineEdit()
+        self.chance_edit.setMaximumWidth(30)
+        self.chance_edit.editingFinished.connect(self.change_data)
+        self.main_layout.addWidget(self.supply_label)
+        self.main_layout.addWidget(self.supply_edit)
+        self.main_layout.addWidget(self.chance_label)
+        self.main_layout.addWidget(self.chance_edit)
+        self.setLayout(self.main_layout)
+
+        self.entry_name = None
+        self.supply_name = None
+        self.supplies = None
+        self.current_quantity = None
+        self.current_chance = None
+
+    def get_all_parents(self, supply_name):
+        all_parents = []
+
+        def get_parents(supply):
+            for parent_name in self.supplies[supply].parents:
+                if parent_name not in self.supplies:
+                    continue
+                all_parents.append(parent_name)
+                get_parents(parent_name)
+        get_parents(supply_name)
+        return all_parents
+
+    def set_data(self, entry_name, supply_name, supply_data):
+        self.supplies = supply_data
+        self.entry_name = entry_name
+        self.supply_name = supply_name
+        supply, chance = 0, 0
+        if entry_name not in self.supplies[supply_name].properties:
+            all_parents = self.get_all_parents(self.supply_name)
+            for parent_name in all_parents:
+                if entry_name in self.supplies[parent_name].properties:
+                    supply, chance = self.supplies[parent_name].properties[entry_name].value
+                    break
+        else:
+            supply, chance = self.supplies[supply_name].properties[entry_name].value
+        self.current_quantity = int(supply)
+        self.supply_edit.setText(str(supply))
+        self.chance_edit.setText(str(chance))
+        self.current_chance = float(chance)
+
+    def change_data(self):
+        changed = ""
+        new_chance = self.chance_edit.text()
+        new_chance = float(".".join(new_chance.split(",")))
+        new_supply = int(self.supply_edit.text())
+
+        latest_parent = self.supply_name
+        if self.entry_name not in self.supplies[self.supply_name].properties:
+            all_parents = self.get_all_parents(self.supply_name)
+            for parent_name in all_parents:
+                if self.entry_name in self.supplies[parent_name].properties:
+                    latest_parent = parent_name
+                    break
+
+        if new_chance != self.current_chance or new_supply != self.current_quantity:
+            if latest_parent != self.supply_name:
+                new_line = LineEntry(self.supplies[self.supply_name].file, -1, self.supply_name, self.entry_name,
+                                     [str(new_supply), str(new_chance)], conditions=["", ""])
+                self.supplies[self.supply_name].properties[self.entry_name] = new_line
+            else:
+                if self.entry_name not in self.supplies[self.supply_name].properties:
+                    new_line = LineEntry(self.supplies[self.supply_name].file, -1, self.supply_name, self.entry_name,
+                                         [str(new_supply), str(new_chance)], conditions=["", ""])
+                    self.supplies[self.supply_name].properties[self.entry_name] = new_line
+                else:
+                    self.supplies[self.supply_name].properties[self.entry_name].value = [str(new_supply), str(new_chance)]
+
+        self.data_changed.emit(self.entry_name)
+
+
+class FilterWidget(QWidget):
+    filter_changed = pyqtSignal(str, str)
+
+    def __init__(self, has_all=True):
+        QWidget.__init__(self)
+        self.main_layout = QHBoxLayout()
+        self.name_filter = QLineEdit()
+        self.name_filter.textChanged.connect(self.filter)
+        self.name_filter.setMaximumWidth(150)
+        self.type_filter = ItemTypeSelection(has_all)
+        self.type_filter.currentIndexChanged.connect(self.filter)
+        self.main_layout.addWidget(self.name_filter)
+        self.main_layout.addWidget(self.type_filter)
+        self.setLayout(self.main_layout)
+
+    def get_current(self):
+        return self.name_filter.text(), self.type_filter.currentText()
+
+    def filter(self):
+        self.filter_changed.emit(self.name_filter.text(), self.type_filter.currentText())
+
+
+class SupplyView(QWidget):
+    data_changed = pyqtSignal()
+
+    def __init__(self):
+        QWidget.__init__(self)
+        self.main_layout = QVBoxLayout()
+        self.name_label = QLabel()
+        self.name_label.setStyleSheet("font: bold 16px;")
+        self.name_label.setAlignment(Qt.AlignCenter)
+        self.conditions = SimpleView()
+        self.conditions.value_changed.connect(self.change_condition_data)
+        self.parents = SimpleView()
+        self.parents.value_changed.connect(self.change_parent_data)
+        self.main_layout.addWidget(self.name_label)
+        self.main_layout.addWidget(self.conditions)
+        self.main_layout.addWidget(self.parents)
+        self.setLayout(self.main_layout)
+
+        self.supply_dict = None
+        self.name = None
+
+    def set_data(self, supply_dict, supply_name):
+        self.supply_dict = supply_dict
+        self.name = supply_name
+        self.name_label.setText(supply_name)
+        mock_line = LineEntry("", 0, "", "Conditions", [supply_dict[supply_name]["condition"]], "")
+        self.conditions.fill_from_input_line(mock_line)
+        mock_line = LineEntry("", 0, "", "Parents", supply_dict[supply_name]["parent"], "")
+        self.parents.fill_from_input_line(mock_line)
+
+    def change_condition_data(self):
+        self.supply_dict[self.name]["condition"] = self.conditions.value.text()
+        self.data_changed.emit()
+
+    def change_parent_data(self):
+        self.supply_dict[self.name]["parent"] =self.parents.value.text().split(",")
+        self.data_changed.emit()
+
+
+class DiscountView(QWidget):
+    data_changed = pyqtSignal()
+
+    def __init__(self):
+        QWidget.__init__(self)
+        self.main_layout = QVBoxLayout()
+        self.name_label = QLabel()
+        self.name_label.setStyleSheet("font: bold 16px;")
+        self.name_label.setAlignment(Qt.AlignCenter)
+        self.conditions = SimpleView()
+        self.conditions.value_changed.connect(self.change_data)
+        self.parents = SimpleView()
+        self.parents.value_changed.connect(self.change_parent_data)
+        self.main_layout.addWidget(self.name_label)
+        self.main_layout.addWidget(self.parents)
+        self.main_layout.addWidget(self.conditions)
+        self.setLayout(self.main_layout)
+
         self.line_entry = None
-        self.translation_functions = translation_functions
+        self.index = None
 
-        self.unit_fill = "{:3.1f}%"
-        self.divider = 10
-
-        layout.addWidget(self.name_box)
-        layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        if self.view_type == "slider":
-            self.value = QSlider(Qt.Horizontal)
-            self.value.valueChanged.connect(self.change_value)
-        elif self.view_type == "text":
-            self.value = QLineEdit()
-            self.value.editingFinished.connect(self.change_value)
-        elif self.view_type == "switch":
-            self.value = TrueFalseSwitch()
-            self.value.value_changed.connect(self.change_value)
-        self.value.setFixedWidth(400)
-        self.default = QLabel()
-        self.default.setFixedWidth(70)
-        layout.addWidget(self.value)
-        if self.view_type == "slider":
-            self.curr_val = QLabel()
-            self.curr_val.setFixedWidth(70)
-            layout.addWidget(self.curr_val)
-        layout.addWidget(self.default)
-
-    def set_min_max_step(self, minimum, maximum, step):
-        if self.view_type == "slider":
-            self.value.setMinimum(minimum)
-            self.value.setMaximum(maximum)
-            self.value.setSingleStep(step)
-
-    def fill_from_input_line(self, line_entry, item_type):
+    def set_data(self, line_entry, index):
         self.line_entry = line_entry
+        self.index = index
+        self.name_label.setText("Discount " + str(self.index + 1))
+        mock_line = LineEntry("", 0, "", "Name", [self.line_entry.value[self.index]], "")
+        self.parents.fill_from_input_line(mock_line)
+        mock_line = LineEntry("", 0, "", "Conditions", [self.line_entry.conditions[self.index]], "")
+        self.conditions.fill_from_input_line(mock_line)
 
-        self.name_box.setText(simple_categories[line_entry.prop])
-        if item_type == "artifact":
-            if line_entry.prop in artifact_simple_names:
-                self.name_box.setText(artifact_simple_names[line_entry.prop])
-            if line_entry.prop in artifact_units:
-                self.unit_fill = "{} " + artifact_units[line_entry.prop]
-                self.divider = 1
-        if item_type == "food":
-            if line_entry.prop in food_units:
-                self.unit_fill = "{} " + food_units[line_entry.prop]
-                self.divider = 1
-        if self.view_type == "slider":
-            value = float(line_entry.value[0])
-            if self.translation_functions[0] is not None:
-                value = self.translation_functions[0](value=float(line_entry.value[0]))
-            self.curr_val.setText(self.unit_fill.format(value / self.divider))
-            self.default.setText(self.unit_fill.format(value / self.divider))
-            self.value.setValue(value)
-        elif self.view_type == "text":
-            self.value.setText(",".join(line_entry.value))
-            self.default.setText(",".join(line_entry.value))
-        elif self.view_type == "switch":
-            self.value.set_default(line_entry.value[0])
-            self.default.setText(",".join(line_entry.value))
+    def change_data(self):
+        self.line_entry.conditions[self.index] = self.conditions.value.text()
+        self.data_changed.emit()
 
-    def change_value(self, value=None):
-        if self.view_type == "slider":
-            self.curr_val.setText(self.unit_fill.format(value / self.divider))
-            if self.translation_functions[1] is not None:
-                value = self.translation_functions[1](value=value)
-        elif self.view_type == "text":
-            value = self.value.text()
-        value = str(value)
-        self.value_changed.emit(self.line_entry.prop, value)
+    def change_parent_data(self):
+        self.line_entry.value[self.index] = self.parents.value.text()
+        self.data_changed.emit()
