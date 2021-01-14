@@ -59,7 +59,7 @@ def get_item_types(dirpath):
         for line in infile:
             if not line.strip():
                 continue
-            if line.startswith(";"):
+            if line.strip().startswith(";") or line.strip().startswith("--"):
                 continue
             if "=" in line:
                 continue
@@ -113,6 +113,7 @@ def read_file(path, dirpath):
                 continue
             # Get comments for entry
             if line.strip().startswith(";") or not line.strip() or line.strip().startswith("--"):
+
                 entry.comment_lines[entry_line_no] = line
                 entry_line_no += 1
                 continue
@@ -161,7 +162,7 @@ def read_file(path, dirpath):
 def read_all_files(dirpath):
     files = {}
     for x, y, z in os.walk(os.path.join(dirpath, )):
-        if "configs" not in x:
+        if "configs" not in x and "config" not in x:
             continue
         if "scripts" in x or "plugins" in x or "\mp\\" in x or "\models\\" in x:
             continue
@@ -181,19 +182,6 @@ def get_entries_from_file(file_entry):
     for index, entry in file_entry.entries_order.items():
         entries[entry.name] = entry
     return entries
-
-
-def get_grouped_name_dict(item_types):
-    output_dict = {}
-    for key in item_types:
-        output_dict[key] = []
-        for tag in item_types[key]:
-            if tag in translated_names:
-                name = translated_names[tag]
-            else:
-                name = tag
-            output_dict[key].append((name, tag))
-    return output_dict
 
 
 def write_all(files, dirpath):

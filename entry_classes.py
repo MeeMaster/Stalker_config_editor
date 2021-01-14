@@ -41,6 +41,7 @@ class LineEntry:
         # self.parent = parent
         self.value = value
         self.default = value
+        self.default_conditions = conditions
         self.comment = comment.strip()
         self.level = 0
         self.equal_sign = True
@@ -57,10 +58,10 @@ class LineEntry:
         new_entry = LineEntry(str(self.file), int(self.lineno), str(self.name), str(self.prop),
                               list(self.value), list(self.conditions), str(self.comment))
         new_entry.default = list(self.default)
+        new_entry.default_conditions = list(self.default_conditions)
         return new_entry
 
     def write(self):
-        print(self.value, len(self.value), self.conditions)
         line = "\t\t{}{}{} {}\t{}".format(self.prop,
                                           "\t" * (10 - (len(self.prop) // 4)),
                                           "=" if self.equal_sign else "",
@@ -91,6 +92,7 @@ class Entry:
         self.changed = False
         self.category = None
         self.is_item = False
+        self.is_creature = False
 
     def reset_parents(self):
         for prop_name, prop in list(self.properties.items()):
@@ -162,9 +164,11 @@ class Entry:
         return False
 
     def is_weapon(self):
-        for entry in self.properties:
-            if self.properties[entry].name == "default_weapon_params":
-                return True
+        if self.has_property("ef_weapon_type"):
+            return True
+        # for entry in self.properties:
+        #     if self.properties[entry].name == "default_weapon_params":
+        #         return True
         return False
 
     def is_food(self):
@@ -287,7 +291,6 @@ class CraftingEntry(Entry):
         self.quantity = 1
 
     def add(self, value=1):
-        print(value)
         if self.fixed_quantity:
             return
         self.quantity += value
@@ -306,8 +309,8 @@ class TradeEntry(CraftingEntry):
         CraftingEntry.__init__(self)
         self.chance = {}
         self.quantity = {}
-        self.buy_price = 1. #[1., 1.]
-        self.sell_price = 1. #[1., 1.]
+        self.buy_price = 1.
+        self.sell_price = 1.
 
     def set_chance(self, supply, chance: float):
         self.chance[supply] = chance
@@ -319,9 +322,7 @@ class TradeEntry(CraftingEntry):
 
     def set_buy_price(self, price1: float):
         self.buy_price = price1
-        # self.buy_price[1] = price2
 
     def set_sell_price(self, price1: float):
         self.sell_price = price1
-        # self.sell_price[1] = price2
 

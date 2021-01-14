@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QGridLayo
 from constants import simple_categories, artifact_simple_names, artifact_units, food_units, selections, \
     sections, basic_sections
 from description_reader import translated_names
-from entry_classes import LineEntry
+from entry_classes import LineEntry, Entry
 from item_representations import ItemRepresentation, CraftingItemRepresentation, TradeItemRepresentation
 import configs
 
@@ -49,6 +49,10 @@ class SimpleView(QWidget):
         self.view_type = view_type
         self.line_entry = None
         self.translation_functions = translation_functions
+        self.menu = QMenu(self)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.menu.addAction(QAction("Set to default", self))
+        self.customContextMenuRequested.connect(self.show_header_menu)
 
         self.unit_fill = "{:3.1f}%"
         self.divider = 10
@@ -120,6 +124,32 @@ class SimpleView(QWidget):
         self.value_changed.emit()
         # self.value_changed.emit(self.line_entry.prop, value)
 
+    def show_header_menu(self, point):
+        self.menu.triggered[QAction].connect(self.resolve_action)
+        self.menu.exec_(self.mapToGlobal(point))
+
+    def add_header_option(self, option, target):
+        self.menu.addAction(QAction(option, self))
+        self.menu_actions[option] = target
+
+    def resolve_action(self, action):
+        if action.text() == "Set to default":
+            self.set_to_default()
+
+    def set_to_default(self):
+        self.line_entry.value = self.line_entry.default
+        if self.view_type == "slider":
+            value = float(self.line_entry.default[0])
+            if self.translation_functions[0] is not None:
+                value = self.translation_functions[0](value=float(self.line_entry.default[0]))
+            self.curr_val.setText(self.unit_fill.format(value / self.divider))
+            self.value.setValue(value)
+        elif self.view_type == "text":
+            self.value.setText(",".join(self.line_entry.default))
+        elif self.view_type == "switch":
+            self.value.set_default(self.line_entry.default[0])
+        self.value_changed.emit()
+
 
 class QLabelClickable(QLabel):
     clicked = pyqtSignal(str)
@@ -134,11 +164,9 @@ class QLabelClickable(QLabel):
 
 class EditableBox(QWidget):
     value_changed = pyqtSignal()
-    # value_changed = pyqtSignal(str, str)
 
     def __init__(self):
         QWidget.__init__(self)
-        # self.resize(150, 50)
         self.layout = QVBoxLayout()
         self.editable_widget = QLineEdit()
         self.editable_widget.setMaximumWidth(300)
@@ -149,6 +177,10 @@ class EditableBox(QWidget):
         self.layout.addWidget(self.editable_widget)
         self.layout.addWidget(self.default_value)
         self.editable_widget.editingFinished.connect(self.change_value)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.menu = QMenu(self)
+        self.menu.addAction(QAction("Set to default", self))
+        self.customContextMenuRequested.connect(self.show_header_menu)
         self.entry = None
 
     def fill_values(self, entry):
@@ -163,6 +195,23 @@ class EditableBox(QWidget):
 
     def change_value(self):
         self.entry.value = [a.strip() for a in self.editable_widget.text().split()]
+        self.value_changed.emit()
+
+    def show_header_menu(self, point):
+        self.menu.triggered[QAction].connect(self.resolve_action)
+        self.menu.exec_(self.mapToGlobal(point))
+
+    def add_header_option(self, option, target):
+        self.menu.addAction(QAction(option, self))
+        self.menu_actions[option] = target
+
+    def resolve_action(self, action):
+        if action.text() == "Set to default":
+            self.set_to_default()
+
+    def set_to_default(self):
+        self.entry.value = self.entry.default
+        self.editable_widget.setText(",".join(self.entry.value))
         self.value_changed.emit()
 
 
@@ -328,7 +377,8 @@ class SelectionGridView(QWidget):
         if curr_type != "All":
             available_items = [entry for entry in available_items if entry.is_category(curr_type)]
         if curr_text:
-            available_items = [entry for entry in available_items if curr_text.lower() in translated_names[entry.name].lower()]
+            available_items = [entry for entry in available_items if curr_text.lower()
+                               in translated_names[entry.name].lower() or curr_text.lower() in entry.name]
         self.fill_from_list(available_items)
 
 
@@ -797,6 +847,7 @@ class TradeView(QWidget):
         self.main_layout.addWidget(self.buy_condition)
         self.main_layout.addWidget(self.sell_condition)
         self.discounts = DiscountViewWidget()
+        self.discounts.create_discount.connect(self.create_discount)
         self.supplies = SupplyViewWidget()
         self.main_layout.addWidget(self.buy_price)
         self.main_layout.addWidget(self.sell_price)
@@ -812,6 +863,17 @@ class TradeView(QWidget):
             if item.widget() is None:
                 continue
             item.widget().setParent(None)
+
+    def create_discount(self, name, values):
+        new_entry = Entry()
+        new_entry.load_data(name, [], self.trade_dict["Trader_entries"][0].file, -1)
+        buy_line = LineEntry(self.trade_dict["Trader_entries"][0].file, -1, name, "buy", [values[0]], [""])
+        sell_line = LineEntry(self.trade_dict["Trader_entries"][0].file, -1, name, "sell", [values[1]], [""])
+        new_entry.properties[buy_line.prop] = buy_line
+        new_entry.properties[sell_line.prop] = sell_line
+        max_entry = max(self.trade_dict["Trader_entries"].keys())
+        new_entry.changed = True
+        self.trade_dict["Trader_entries"][max_entry+1] = new_entry
 
     def set_data(self, trade_dict):
         self.trade_dict = trade_dict
@@ -864,18 +926,22 @@ class TradeView(QWidget):
 
 class DiscountViewWidget(QWidget):
     data_changed = pyqtSignal()
+    create_discount = pyqtSignal(str, tuple)
 
     def __init__(self):
         QWidget.__init__(self)
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
         self.button_layout = QHBoxLayout()
-        self.add_button = QPushButton("Add discount")
+        self.create_discount_button = QPushButton("Add new discount entry")
+        self.add_button = QPushButton("Add discount to trader")
         self.button_layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        self.button_layout.addWidget(self.create_discount_button)
         self.button_layout.addWidget(self.add_button)
+        self.create_discount_button.clicked.connect(self.open_discount_popup)
         self.add_button.clicked.connect(self.add_discount)
         self.main_layout.addLayout(self.button_layout)
-
+        self.popup = None
         self.current_index = 0
         self.trade_data = None
 
@@ -890,21 +956,24 @@ class DiscountViewWidget(QWidget):
     def set_data(self, data):
         self.clear()
         self.trade_data = data
-        for discount_index, discount_value in enumerate(self.trade_data["line"].value):
+        for discount_index, discount_value in enumerate(reversed(self.trade_data["line"].value)):
             self.add_widget(discount_index)
             self.current_index = discount_index
 
+    def open_discount_popup(self):
+        self.popup = DiscountCreationPopup()
+        self.popup.ok_clicked.connect(self.create_discount_entry)
+        self.popup.cancel_clicked.connect(self.close_popup)
+
+    def close_popup(self):
+        self.popup.close()
+        self.popup = None
+
+    def create_discount_entry(self, name, values):
+        self.create_discount.emit(name, values)
+        self.close_popup()
+
     def add_discount(self):
-        # nums = [0]
-        # for name in self.trade_data:
-        #     if "supplies_" not in name:
-        #         continue
-        #     num = name.replace("supplies_", "")
-        #     try:
-        #         int(num)
-        #     except:
-        #         continue
-        #     nums.append(int(num))
         self.trade_data["line"].conditions.append("")
         self.trade_data["line"].value.append("")
         # self.trade_data["entries"]
@@ -923,6 +992,63 @@ class DiscountViewWidget(QWidget):
     def emit_change(self):
         self.data_changed.emit()
 
+
+class DiscountCreationPopup(QWidget):
+    ok_clicked = pyqtSignal(str, tuple)
+    cancel_clicked = pyqtSignal()
+    
+    def __init__(self):
+        QWidget.__init__(self)
+        self.setWindowModality(Qt.ApplicationModal)
+        self.main_layout = QVBoxLayout()
+        main_label = QLabel("Create new discount")
+        main_label.setStyleSheet("font: bold 16px;")
+        self.main_layout.addWidget(main_label)
+        name_layout = QHBoxLayout()
+        buy_layout = QHBoxLayout()
+        sell_layout = QHBoxLayout()
+        buttons_layout = QHBoxLayout()
+        
+        self.main_layout.addLayout(name_layout)
+        self.main_layout.addLayout(buy_layout)
+        self.main_layout.addLayout(sell_layout)
+        self.main_layout.addLayout(buttons_layout)
+        
+        name_label = QLabel("Name")
+        self.name_edit = QLineEdit()
+        name_layout.addWidget(name_label)
+        name_layout.addWidget(self.name_edit)
+
+        buy_label = QLabel("Buy")
+        self.buy_edit = QLineEdit()
+        buy_layout.addWidget(buy_label)
+        buy_layout.addWidget(self.buy_edit)
+
+        sell_label = QLabel("Sell")
+        self.sell_edit = QLineEdit()
+        sell_layout.addWidget(sell_label)
+        sell_layout.addWidget(self.sell_edit)
+
+        buttons_layout.addSpacerItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        ok_button = QPushButton("OK")
+        cancel_button = QPushButton("Cancel")
+        buttons_layout.addWidget(ok_button)
+        buttons_layout.addWidget(cancel_button)
+        ok_button.clicked.connect(self.ok_button_clicked)
+        cancel_button.clicked.connect(self.cancel_button_clicked)
+        self.setLayout(self.main_layout)
+        self.show()
+
+    def ok_button_clicked(self):
+        new_name = self.name_edit.text().strip()
+        new_buy = self.buy_edit.text().strip()
+        new_sell = self.sell_edit.text().strip()
+        if not new_name or not new_buy or not new_sell:
+            return
+        self.ok_clicked.emit(new_name, (new_buy, new_sell))
+
+    def cancel_button_clicked(self):
+        self.cancel_clicked.emit()
 
 class SupplyViewWidget(QWidget):
     data_changed = pyqtSignal()
@@ -1040,7 +1166,8 @@ class TradingListView(QWidget):
                                              list(sorted(self.trade_entry["Stocks"].keys())))
         good_items = [item for item_name, item in self.trade_entry["Merch"].items() if item.category == curr_sect]
         if curr_text:
-            good_items = [item for item in good_items if curr_text.lower() in translated_names[item.name].lower()]
+            good_items = [item for item in good_items if curr_text.lower() in translated_names[item.name].lower() or
+                          curr_text.lower() in item.name]
         self.table.setRowCount(len(good_items))
         for index, item in enumerate(good_items):
             self.entry_order[item.name] = index

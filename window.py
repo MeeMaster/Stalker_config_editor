@@ -107,6 +107,7 @@ class MyWindowWidget(QWidget):
         self.reader = None
         self.name_dict = {}
         self.current_display_item = None
+        self.current_display_actor = None
 
         # Create two (three?) panels
         self.main_layout = QHBoxLayout(self)
@@ -163,6 +164,15 @@ class MyWindowWidget(QWidget):
         self.trade_tab_layout.addWidget(self.trade_view)
         self.trader_tab.setLayout(self.trade_tab_layout)
 
+        # Actors tab layout
+        self.actors_tab = QWidget()
+        self.tabs.addTab(self.actors_tab, "Actors")
+        self.actors_scroll_layout = QVBoxLayout()
+        self.actors_scroll_widget = QScrollArea()
+        self.actors_scroll_widget.setWidgetResizable(True)
+        self.actors_scroll_layout.addWidget(self.actors_scroll_widget)
+        self.actors_tab.setLayout(self.actors_scroll_layout)
+
         # Add icon display
         self.icon_widget = ItemStatsDisplay()
         self.images_layout.addWidget(self.icon_widget)
@@ -186,6 +196,7 @@ class MyWindowWidget(QWidget):
     def update_layout(self):
         self.setLayout(self.main_layout)
         self.display_value_data(self.current_display_item)
+        self.display_actor_data(self.current_display_actor)
 
     def change_section(self):
         current_section = self.sections.currentText()
@@ -204,8 +215,18 @@ class MyWindowWidget(QWidget):
             item_list_widget = self.build_full_view(entry)
         self.value_scroll_widget.setWidget(item_list_widget)
 
-    def build_full_view(self, entry):
+    def display_actor_data(self, entry):
+        self.current_display_actor = entry
+        if entry is None:
+            return
+        # self.current_display_ = entry
+        if simple_view:
+            item_list_widget = self.build_simple_view(entry)
+        else:
+            item_list_widget = self.build_full_view(entry)
+        self.actors_scroll_widget.setWidget(item_list_widget)
 
+    def build_full_view(self, entry):
         item_list_widget_layout = QVBoxLayout()
         item_list_widget = QWidget()
         main_widget = EditableGridView()
@@ -236,7 +257,7 @@ class MyWindowWidget(QWidget):
         entries = [line_entry for line_name, line_entry in entry.properties.items() if
                    line_name in simple_categories]
         for line_entry in entries:
-            if line_entry.prop in sliders:
+            if line_entry.prop in sliders and not entry.is_creature:
                 recalculation_functions = (calculate_normal_to_int, calculate_int_to_normal)
                 if entry.is_artifact():
                     if line_entry.prop in artifact_params_coeffs:

@@ -7,7 +7,7 @@ from entry_classes import CraftingEntry, TradeEntry
 from file_reader import *
 from window import MainWindow
 from images import *
-from constants import basic_sections, sections, tools
+from constants import basic_sections, sections, tools, update_armor_params
 
 
 class DataHandler:
@@ -22,6 +22,7 @@ class DataHandler:
         self.files = {}
         self.grouped_name_dict = {}
         self.traders = {}
+        self.creatures = {}
 
     def reset(self):
         self.names = {}
@@ -34,6 +35,7 @@ class DataHandler:
         self.files = {}
         self.grouped_name_dict = {}
         self.traders = {}
+        self.creatures = {}
 
     def get_all_item_properties(self, item):
         fetched_entries = {}
@@ -68,25 +70,17 @@ class DataHandler:
                 item.properties[entry] = fetched_entries[level][entry]
                 item.properties[entry].level = level
 
-        if item.has_property("hit_absorbation_sect"):
-            sect = item.properties["hit_absorbation_sect"].value[0]
-            level = item.properties["hit_absorbation_sect"].level
-            if sect in self.entries:
-                for entry in self.entries[sect].properties:
-                    if entry in item.properties and level >= item.properties[entry].level:
-                        continue
-                    item.properties[entry] = self.entries[sect].properties[entry]
-                    item.properties[entry].level = level + 1
+        for property_name in ["hit_absorbation_sect", "immunities_sect", "condition_sect"]:
+            if item.has_property(property_name):
+                sect = item.properties[property_name].value[0]
+                level = item.properties[property_name].level
+                if sect in self.entries:
+                    for entry in self.entries[sect].properties:
+                        if entry in item.properties and level >= item.properties[entry].level:
+                            continue
+                        item.properties[entry] = self.entries[sect].properties[entry]
+                        item.properties[entry].level = level + 1
 
-        if item.has_property("immunities_sect"):
-            sect = item.properties["immunities_sect"].value[0]
-            level = item.properties["immunities_sect"].level
-            if sect in self.entries:
-                for entry in self.entries[sect].properties:
-                    if entry in item.properties and level >= item.properties[entry].level:
-                        continue
-                    item.properties[entry] = self.entries[sect].properties[entry]
-                    item.properties[entry].level = level + 1
         return item
 
     def file_present(self, filename):
@@ -164,6 +158,7 @@ class DataHandler:
         self.traders = traders
 
     def get_trade_info(self, trader):
+        print("Getting info for trader: {}".format(trader))
         file_entry = None
         for filename, f_entry in self.files.items():
             name = os.path.splitext(os.path.split(filename)[1])[0].replace("trade_", "")
@@ -186,12 +181,12 @@ class DataHandler:
         discount_line = entries["trader"].properties["discounts"] if\
             "discounts" in entries["trader"].properties else LineEntry("", 0, "", "discounts", [])
         discount_entries = {}
-        for entry_name in discount_line.value:
+        for entry_name in reversed(discount_line.value):
             if entry_name not in entries:
-                if entry_name not in self.entries:
-                    discount_entries[entry_name] = Entry()  # TODO fill this entry
-                else:
-                    entry = self.entries[entry_name]
+                # if entry_name not in self.entries:
+                #     discount_entries[entry_name] = Entry()  # TODO fill this entry
+                # else:
+                entry = self.entries[entry_name]
             else:
                 entry = entries[entry_name]
             discount_entries[entry_name] = entry
@@ -200,6 +195,7 @@ class DataHandler:
                        "Merch": all_items,
                        "Stocks": {},
                        "Stock_info": {},
+                       "Trader_entries": file_entry.entries_order,
                        "Stock_line": entries["trader"].properties["buy_supplies"],
                        "Buy_conditions":  entries[buy_cond.value[0]],
                        "Sell_conditions": entries[sell_cond.value[0]],  # TODO: Add custom buy/sell conditions!!
@@ -217,6 +213,8 @@ class DataHandler:
                                                          entries["trader"].properties["buy_supplies"].conditions)))):
             value, condition = values
             if not value:
+                continue
+            if value not in entries:
                 continue
             stock = entries[value]
             self.get_all_item_properties(stock)
@@ -286,12 +284,19 @@ class DataHandler:
         self.entries[name].change_value(prop_name, new_value)
 
     def get_grouped_name_dict(self):
-        self.grouped_name_dict = get_grouped_name_dict(self.item_types)
-        for item_type, items in self.grouped_name_dict.items():
-            for item_translated, entry_name in items:
-                if entry_name not in self.entries:
+        output_dict = {}
+        for key in self.item_types:
+            output_dict[key] = []
+            for tag in self.item_types[key]:
+                if tag not in self.entries:
                     continue
-                self.entries[entry_name].set_category(item_type)
+                self.entries[tag].set_category(key)
+                if tag in translated_names:
+                    name = translated_names[tag]
+                else:
+                    name = tag
+                output_dict[key].append((name, tag))
+        self.grouped_name_dict = output_dict
 
     def get_all_items_data(self):
         for entry in self.entries:
@@ -317,6 +322,25 @@ class DataHandler:
                 if name_tag == item_name[2:]:
                     entry_lines.append(self.entries[str(craft_type)].properties[item_name])
         return entry_lines
+
+    def get_creatures(self):
+        self.creatures = {}
+        for entry_name, entry in self.entries.items():
+            if not entry.has_property("ef_creature_type"):
+                continue
+            entry.is_creature = True
+            self.creatures[entry_name] = entry
+        self.update_max_armor()
+        update_armor_params()
+
+    def update_max_armor(self):
+        if "actor" not in self.creatures:
+            return
+        entry = self.creatures["actor"]
+        for property_name, property_entry in entry.properties.items():
+            if property_name not in configs.max_armor_values:
+                continue
+            configs.max_armor_values[property_name] = float(property_entry.value[0])
 
     def remove_line(self, entry_name, line_name):
         if entry_name not in self.entries:
@@ -515,13 +539,16 @@ class App:
 
     def display_data_for_item(self, item_tag):
         self.current_item = item_tag
-
         item_dict = self.data_handler.get_all_item_data(item_tag)
         self.main_widget.display_value_data(item_dict)
         if self.craft_available:
             crafting_info = self.data_handler.get_craft_info(item_tag)
             self.main_widget.craft_view.fill_values(crafting_info)
         self.main_widget.icon_widget.load_entry(item_dict)
+
+    def display_data_for_actor(self, actor_name):
+        creature_info = self.data_handler.creatures[actor_name]
+        self.main_widget.display_actor_data(creature_info)
 
     def change_tab(self, index):
         current_tab = int(self.current_tab)
@@ -548,6 +575,10 @@ class App:
             window.set_available_entries(all_entries)
 
     def change_value(self):  # , entry_name, new_value):
+        if "actor" in self.data_handler.creatures:
+            if self.data_handler.creatures["actor"].is_changed():
+                self.data_handler.update_max_armor()
+                update_armor_params()
         self.main_widget.icon_widget.load_entry(self.data_handler.get_item(self.current_item))
 
     def read_files(self, dirpath, read):
@@ -563,6 +594,7 @@ class App:
             if error:
                 self.raise_error(error)
         self.data_handler.get_traders()
+        self.data_handler.get_creatures()
         self.craft_available = self.data_handler.crafting_available()
         self.main_widget.tabs.setTabEnabled(1, self.craft_available)
 
@@ -576,6 +608,10 @@ class App:
         elif self.current_tab in [2]:
             self.main_widget.disable_list(True)
             self.main_widget.set_combo_options(list(self.data_handler.traders.keys()))
+
+        elif self.current_tab in [3]:
+            self.main_widget.disable_list(True)
+            self.main_widget.set_combo_options(list(self.data_handler.creatures.keys()))
 
     def display_item_list(self, item_dict):
         self.main_widget.display_item_list(item_dict)
@@ -593,7 +629,6 @@ class App:
             current_dict = {}
             target_parts = []
             if all_items:
-
                 configs.basic_view = False
                 if current_section in sections:
                     target_parts = sections[current_section]
@@ -616,11 +651,15 @@ class App:
             self.current_trader = current_section
             trade_data = self.data_handler.traders[current_section]
             self.main_widget.trade_view.set_data(trade_data)
+        elif self.current_tab == 3:
+            if not current_section:
+                return
+            self.display_data_for_actor(current_section)
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app_class = App()
-    app_class.read_files("E:/Stalker_modding/unpacked", "read")
+    # app_class.read_files("E:/Stalker_modding/unpacked", "read")
     sys.exit(app.exec_())
 

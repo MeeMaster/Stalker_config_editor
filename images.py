@@ -24,11 +24,14 @@ def load_status_icons():
 
 
 def load_all_icons():
-    load_equipment_icons()
+    if icons is None:
+        load_equipment_icons()
     load_status_icons()
 
 
 def get_icon_data(item_entry):
+    if item_entry is None:
+        return None
     start_x, start_y, size_x, size_y = None, None, None, None
     # print(item_entry.name, item_entry.properties.keys())
     for name in item_entry.properties:
@@ -45,6 +48,8 @@ def get_icon_data(item_entry):
 
 def load_icon_from_entry(entry):
     data = get_icon_data(entry)
+    if data is None:
+        return
     # print(data)
     for a in data:
         if a is None:
